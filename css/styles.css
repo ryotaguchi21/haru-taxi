@@ -220,6 +220,11 @@ body{
 .lvlbadge{ display:inline-block; margin-top:4px; align-self:flex-start; background:linear-gradient(180deg,#ffe08a,#ffc531);
   color:#6b4e00; font-weight:700; font-size:.86rem; padding:5px 12px; border-radius:999px; box-shadow:0 3px 0 var(--taxi-d); }
 .statgrid{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-top:12px; }
+.statgrid.four{ grid-template-columns:1fr 1fr; }
+.statgrid.four .sv{ font-variant-numeric:tabular-nums; }
+.coinline{ margin:8px 0 2px; background:linear-gradient(180deg,#fff6d8,#ffe9a8); border:2px solid #ffd94f; border-radius:16px;
+  padding:8px 18px; font-weight:700; color:#a06b00; }
+.coinline b{ font-family:'Fredoka',sans-serif; font-size:1.15rem; color:#e5941c; }
 .stat{ background:#fff; border-radius:18px; padding:12px 6px; text-align:center; box-shadow:0 5px 0 #dbe6f4; }
 .stat .sv{ display:block; font-family:'Fredoka',sans-serif; font-size:1.8rem; font-weight:700; color:var(--ink); line-height:1; }
 .stat .sl{ display:block; margin-top:4px; font-size:.72rem; font-weight:700; color:#5a6b86; }

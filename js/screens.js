@@ -221,6 +221,7 @@ function doneScreen(){
       <h2 class="bigmsg" style="margin-top:8px">また のってね！<span class="en">See you again!</span></h2>
       ${unlocked}${missions}
       <div class="ptcard"><div class="plab">⭐ ポイント ゲット！</div><div class="pnum">+${state.points}</div><div class="pen">You earned ${state.points} points!</div></div>
+      <div class="coinline">🪙 コイン ぜんぶで <b>${(PROFILE.coins||0).toLocaleString()}</b></div>
       ${streak}
       <p class="paidline">${p.pic} ${p.jp} で ¥${total.toLocaleString()} はらったよ</p>
       ${ate}${pet}
@@ -319,9 +320,10 @@ function myPageScreen(){
         <div class="avatar">${avatarSVG()}</div>
         <div class="pinfo"><b>${p.name} <span class="pen2">(${p.nameEn})</span></b><span class="age">${p.age}さい / ${p.age} yrs old</span><span class="lvlbadge">${lvl.emoji} ${lvl.jp}</span></div>
       </div>
-      <div class="statgrid">
+      <div class="statgrid four">
         <div class="stat"><span class="sv">${p.rides}</span><span class="sl">🚕 のった<small>rides</small></span></div>
         <div class="stat"><span class="sv">${p.points}</span><span class="sl">⭐ ポイント<small>points</small></span></div>
+        <div class="stat"><span class="sv">${p.coins||0}</span><span class="sl">🪙 コイン<small>coins</small></span></div>
         <div class="stat"><span class="sv">${placesVisited}</span><span class="sl">📍 ばしょ<small>places</small></span></div>
       </div>
       <div class="streakcard sm"><span class="fire">🔥</span><div><b>${s.count}にち れんぞく</b><span>${s.count}-day streak</span></div></div>
