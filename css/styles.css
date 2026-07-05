@@ -458,10 +458,18 @@ body{
 .petchip:active{ transform:translateY(2px); box-shadow:0 2px 0 #dbe6f4; }
 .rtier.auto{ background:#e0f7ee; color:#1c9b6a; }
 
-/* ---- live map on riding screen ---- */
-.livewrap{ position:relative; padding:12px 16px 2px; }
-.etachip.live{ position:absolute; right:26px; top:22px; }
+/* ---- live navigation map on riding screen ---- */
+.livewrap{ position:relative; padding:8px 16px 2px; }
+.livehead{ display:flex; align-items:center; justify-content:space-between; margin:0 4px 6px; }
+.livehead .navi{ font-weight:700; font-size:.82rem; color:#2f6fd8; }
+.livehead .navto{ font-weight:700; font-size:.82rem; color:#5a6b86; }
+.mapcard.live{ padding:6px; } .mapcard.live svg{ max-height:none; }
+.etachip.live{ position:absolute; right:26px; top:40px; }
 .etachip.arrived b{ color:var(--green); }
+/* flowing dashes that stream toward the destination */
+.routeflow{ animation:routeflow 1s linear infinite; }
+@keyframes routeflow{ to{ stroke-dashoffset:-15; } }
+#livedone{ transition:none; }
 
 /* ---- self-driving controls ---- */
 .selfdrive{ margin:12px 16px 0; background:linear-gradient(180deg,#eaf6ff,#d9ecff); border-radius:18px; padding:12px; box-shadow:0 5px 0 #c3ddf2; }

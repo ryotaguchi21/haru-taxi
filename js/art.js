@@ -182,8 +182,42 @@ function pinTeardrop(d, tappable, showLabel){
     + label + `</g>`;
 }
 
-/* curved route from the pickup point up to a destination pin */
+/* curved route from the pickup point up to a destination pin (simple preview) */
 function routeD(o, p){ return `M ${o.x} ${o.y} C ${o.x} ${o.y-70}, ${p.x} ${p.y+70}, ${p.x} ${p.y}`; }
+
+/* ---- complex "GPS" route: a stepped Manhattan course with several turns ---- */
+function liveRoutePoints(d){
+  const o=MAP_ORIGIN, t=d.pos, dy=o.y-t.y;
+  const y1=o.y-dy*0.28, y2=o.y-dy*0.56, y3=o.y-dy*0.82;   // three rungs going up
+  const jx=o.x+(t.x-o.x)*0.62, kx=o.x+(t.x-o.x)*0.30;      // two side jogs
+  return [
+    {x:o.x, y:o.y},
+    {x:o.x, y:y1},        // ↑
+    {x:kx,  y:y1},        // → turn
+    {x:kx,  y:y2},        // ↑ turn
+    {x:jx,  y:y2},        // → turn
+    {x:jx,  y:y3},        // ↑ turn
+    {x:t.x, y:y3},        // → turn
+    {x:t.x, y:t.y}        // ↑ arrive at the pin
+  ];
+}
+/* turn a polyline into a path with rounded corners */
+function roundedPath(pts, r){
+  if(pts.length<2) return '';
+  let d=`M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+  for(let i=1;i<pts.length-1;i++){
+    const p0=pts[i-1], p1=pts[i], p2=pts[i+1];
+    const v1x=p1.x-p0.x, v1y=p1.y-p0.y, v2x=p2.x-p1.x, v2y=p2.y-p1.y;
+    const l1=Math.hypot(v1x,v1y)||1, l2=Math.hypot(v2x,v2y)||1;
+    const rr=Math.min(r, l1/2, l2/2);
+    const ax=p1.x-v1x/l1*rr, ay=p1.y-v1y/l1*rr;
+    const bx=p1.x+v2x/l2*rr, by=p1.y+v2y/l2*rr;
+    d+=` L ${ax.toFixed(1)} ${ay.toFixed(1)} Q ${p1.x.toFixed(1)} ${p1.y.toFixed(1)} ${bx.toFixed(1)} ${by.toFixed(1)}`;
+  }
+  const last=pts[pts.length-1];
+  d+=` L ${last.x.toFixed(1)} ${last.y.toFixed(1)}`;
+  return d;
+}
 
 /* opts: { pins:'all'|'dest'|'none', dest:<id>, route:bool, approach:bool(car drives in), carId } */
 function navMapSVG(opts){
@@ -205,10 +239,20 @@ function navMapSVG(opts){
   s += NAV_ROADS.map(r=>`<path d="${r.d}" stroke="#ffffff" stroke-width="${r.w-4}" fill="none" stroke-linecap="round"/>`).join('');
   // route
   if(opts.route && dest){
-    const d = routeD(o, dest.pos);
-    const rid = opts.live ? ' id="liveroute"' : '';
-    s += `<path d="${d}" stroke="#ffffff" stroke-width="10" fill="none" stroke-linecap="round"/>`;
-    s += `<path${rid} d="${d}" stroke="#2b3446" stroke-width="6" fill="none" stroke-linecap="round"/>`;
+    if(opts.live){
+      // complex multi-turn GPS course: casing → remaining → flowing dashes → progress overlay → turn dots
+      const pts = liveRoutePoints(dest);
+      const dd = roundedPath(pts, 15);
+      s += `<path d="${dd}" stroke="#ffffff" stroke-width="13" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+      s += `<path id="liveroute" d="${dd}" stroke="#c2ccda" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+      s += `<path class="routeflow" d="${dd}" stroke="#8fb4ea" stroke-width="3.4" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 13"/>`;
+      s += `<path id="livedone" d="${dd}" stroke="#2f6fd8" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+      s += pts.slice(1,-1).map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.6" fill="#fff" stroke="#2f6fd8" stroke-width="2"/>`).join('');
+    } else {
+      const d = routeD(o, dest.pos);
+      s += `<path d="${d}" stroke="#ffffff" stroke-width="10" fill="none" stroke-linecap="round"/>`;
+      s += `<path d="${d}" stroke="#2b3446" stroke-width="6" fill="none" stroke-linecap="round"/>`;
+    }
   }
   // destination pin(s) — labels only when a single pin is shown (all-pins map is crowded)
   if(opts.pins==='all') s += DESTS.map(d=>pinTeardrop(d, true, false)).join('');
@@ -222,9 +266,9 @@ function navMapSVG(opts){
     s += `<g><animateMotion dur="2.6s" fill="freeze" keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines="0.4 0 0.2 1" path="${ap}"/>`
        + `<g transform="translate(-24,-18)"><svg x="0" y="0" width="48" height="33" viewBox="0 0 220 150" overflow="visible">${carInner(opts.carId)}</svg></g></g>`;
   }
-  // live token driven by JS along #liveroute (riding screen)
+  // live token driven by JS along #liveroute (riding screen); inner g centres the car
   if(opts.live && opts.carId){
-    s += `<g id="livecar" transform="translate(${o.x},${o.y})"><g transform="translate(-24,-18)"><svg x="0" y="0" width="48" height="33" viewBox="0 0 220 150" overflow="visible">${carInner(opts.carId)}</svg></g></g>`;
+    s += `<g id="livecar" transform="translate(${o.x},${o.y})"><ellipse cx="0" cy="15" rx="18" ry="5" fill="rgba(0,0,0,.12)"/><g id="livecarinner" transform="translate(-22,-17)"><svg x="0" y="0" width="44" height="30" viewBox="0 0 220 150" overflow="visible">${carInner(opts.carId)}</svg></g></g>`;
   }
   s += `</svg>`; return s;
 }

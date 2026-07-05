@@ -31,33 +31,46 @@ function render(){
   if(state.screen==='done')       setTimeout(()=>sfx.points(),120);
 }
 
-/* meter + progress + live-map token + ticking ETA while riding */
+/* meter + progress + live-map navigation + ticking ETA while riding */
 function startRide(){
   state.fare=CONFIG.baseFare;
   const bar=document.getElementById('progbar'); if(bar) requestAnimationFrame(()=>{ bar.style.width='100%'; });
   const m0=document.getElementById('meter'); if(m0) m0.textContent='¥'+CONFIG.baseFare;
   sfx.horn();
+  // live-map references + geometry
+  const d=DESTS.find(x=>x.id===state.dest);
+  const route=document.getElementById('liveroute'), token=document.getElementById('livecar'),
+        done=document.getElementById('livedone'), etaEl=document.getElementById('etamin');
+  const totalMin=etaMinutes(d); let len=0; try{ len=route?route.getTotalLength():0; }catch(_){}
+  if(done && len){ done.style.strokeDasharray=len; done.style.strokeDashoffset=len; }
+  let facing=1;
+  function updateLive(pr){           // absolute (idempotent) — safe to call from rAF + interval
+    if(route && token && len){
+      const at=len*pr, pt=route.getPointAtLength(at), ah=route.getPointAtLength(Math.min(len, at+3));
+      if(ah.x-pt.x>0.5) facing=1; else if(ah.x-pt.x<-0.5) facing=-1;     // face left/right of travel
+      token.setAttribute('transform','translate('+pt.x.toFixed(1)+','+pt.y.toFixed(1)+') scale('+facing+',1)');
+      if(done) done.style.strokeDashoffset=(len*(1-pr)).toFixed(1);        // reveal the road behind the car
+    }
+    if(etaEl) etaEl.textContent=Math.max(0,Math.ceil(totalMin*(1-pr)));
+  }
   const t0=performance.now();
+  // interval drives the meter AND the map (keeps advancing even if the tab is backgrounded)
   ride=setInterval(()=>{
     state.fare+=10+Math.floor(Math.random()*18);
     const m=document.getElementById('meter'); if(m) m.textContent='¥'+state.fare.toLocaleString();
+    const el=Math.min(1,(performance.now()-t0)/RIDE_MS); updateLive(el);
     if(performance.now()-t0>=RIDE_MS){
-      clearInterval(ride); ride=null; sfx.ding();
+      clearInterval(ride); ride=null; updateLive(1); sfx.ding();
       const b=document.getElementById('arrbadge'); if(b) b.classList.add('show');
       const ob=document.getElementById('offbtn'); if(ob) ob.classList.add('pulse');
     }
   },250);
-  // animate the live-map car token along the route + tick the ETA down
-  const d=DESTS.find(x=>x.id===state.dest);
-  const route=document.getElementById('liveroute'), token=document.getElementById('livecar'), etaEl=document.getElementById('etamin');
-  const totalMin=etaMinutes(d); let len=0; try{ len=route?route.getTotalLength():0; }catch(_){}
-  (function frame(now){
+  // rAF makes the car glide smoothly while the tab is visible
+  (function frame(){
     if(state.screen!=='riding') return;
-    const pr=Math.min(1,(now-t0)/RIDE_MS);
-    if(route && token && len){ const pt=route.getPointAtLength(len*pr); token.setAttribute('transform','translate('+pt.x+','+pt.y+')'); }
-    if(etaEl) etaEl.textContent=Math.max(0,Math.ceil(totalMin*(1-pr)));
+    const pr=Math.min(1,(performance.now()-t0)/RIDE_MS); updateLive(pr);
     if(pr<1) requestAnimationFrame(frame);
-  })(t0);
+  })();
 }
 
 /* pickup screen: tick the ETA minutes down while the car drives in */

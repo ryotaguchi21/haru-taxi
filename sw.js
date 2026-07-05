@@ -1,6 +1,6 @@
 /* Simple offline cache for the taxi app (app shell, cache-first).
    Bump CACHE when you change files so clients pick up the new version. */
-const CACHE = 'haru-taxi-v4';
+const CACHE = 'haru-taxi-v5';
 const ASSETS = [
   './', './index.html',
   './css/styles.css',

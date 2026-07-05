@@ -141,7 +141,8 @@ function ridingScreen(){
       <div class="ridestage"><div class="ridescene">${sceneSVG(d.scene, w)}</div>${weatherOverlayHTML(w)}
         <div class="ridecar idlecar">${carSVG(c.id,{decor:true,pet:state.pet})}</div><div class="roadstrip"></div>
         <div class="arrbadge" id="arrbadge">とうちゃく！ 🎉</div></div>
-      <div class="livewrap"><div class="mapcard slim">${navMapSVG({pins:'dest',dest:state.dest,route:true,live:true,carId:c.id})}</div>
+      <div class="livewrap"><div class="livehead"><span class="navi">🧭 ナビ</span><span class="navto">${d.emoji} ${d.jp}へ</span></div>
+        <div class="mapcard live">${navMapSVG({pins:'dest',dest:state.dest,route:true,live:true,carId:c.id})}</div>
         <div class="etachip live"><b id="etamin">${etaMinutes(d)}</b><span>ふん<br>min</span></div></div>
       <div class="meterbox"><span class="mlab">メーター<small>meter</small></span><b id="meter">¥${CONFIG.baseFare}</b></div>
       <div class="progwrap"><div class="progbar" id="progbar"></div></div>
