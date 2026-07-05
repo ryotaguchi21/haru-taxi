@@ -37,8 +37,28 @@ function spaceshipInner(){
 
 /* ---- main car builder (data-driven via CARS[].art) ---- */
 /* carInner() returns just the drawing (shadow + body group) so it can be dropped
-   into any <svg> (e.g. nested inside the map). carSVG() wraps it in a full <svg>. */
-function carSVG(id){ return `<svg viewBox="0 0 220 150" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${carInner(id)}</svg>`; }
+   into any <svg> (e.g. nested inside the map). carSVG() wraps it in a full <svg>.
+   opts: { decor:true (apply PROFILE.decor), pet:'<petId or emoji>' } */
+function carSVG(id, opts){
+  opts = opts || {};
+  let extra = '';
+  if(opts.decor) extra += decorInner(PROFILE.decor);
+  if(opts.pet){ const p = petById(opts.pet); extra += petInner(p ? p.emoji : opts.pet); }
+  return `<svg viewBox="0 0 220 150" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${carInner(id)}${extra}</svg>`;
+}
+/* decorations: an accessory on the roof + up to 3 stickers on the body */
+function decorInner(decor){
+  if(!decor) return '';
+  let s='';
+  const acc = DECOR_ACCESSORIES.find(a=>a.id===decor.accessory);
+  if(acc && acc.emoji) s += `<text x="110" y="40" font-size="26" text-anchor="middle">${acc.emoji}</text>`;
+  const slots=[[70,116],[92,116],[114,116]];
+  (decor.stickers||[]).slice(0,3).forEach((em,i)=>{ const [x,y]=slots[i]; s+=`<text x="${x}" y="${y}" font-size="16" text-anchor="middle">${em}</text>`; });
+  return s;
+}
+/* a pet peeking out of the window */
+function petInner(emoji){ return emoji ? `<text x="150" y="80" font-size="22" text-anchor="middle">${emoji}</text>` : ''; }
+
 function carInner(id){
   const car = CARS.find(c=>c.id===id); const a = car ? car.art : {kind:'taxi'};
   if(a.kind==='spaceship') return spaceshipInner();
@@ -72,6 +92,14 @@ function carInner(id){
     }
     case 'tesla': {
       s+=lowerBody('#f4f6f9','#d7dde6')+cabinSleek('#f4f6f9','#d7dde6')+`<rect x="186" y="92" width="12" height="10" rx="4" fill="#ff5a4d"/>`+face(110,76,22)+smileCheeks(150,102); break;
+    }
+    case 'robotaxi': {
+      const rb=a.body||'#e3e9f2';
+      s+=lowerBody(rb,'#cfd6e0')+cabinSleek(rb,'#cfd6e0');
+      s+=`<rect x="186" y="92" width="12" height="10" rx="4" fill="#28d07a"/>`;               // "go" light
+      s+=`<g class="lidar" transform="translate(108,50)"><rect x="-11" y="-1" width="22" height="8" rx="3" fill="#2b2f3a"/><circle cx="0" cy="-6" r="7.5" fill="#3a4150"/><circle cx="0" cy="-6" r="3.4" fill="#7cf3ff"/></g>`; // rooftop sensor
+      s+=`<rect x="150" y="66" width="20" height="12" rx="3" fill="#1e2634"/><rect x="153" y="69" width="14" height="6" rx="2" fill="#7cf3ff" opacity=".85"/>`; // screen
+      s+=face(104,76,20)+smileCheeks(148,102); break;
     }
     case 'van': {
       s+=lowerBody(a.body||'#26292f')+cabinVan(a.body||'#26292f');
@@ -178,8 +206,9 @@ function navMapSVG(opts){
   // route
   if(opts.route && dest){
     const d = routeD(o, dest.pos);
+    const rid = opts.live ? ' id="liveroute"' : '';
     s += `<path d="${d}" stroke="#ffffff" stroke-width="10" fill="none" stroke-linecap="round"/>`;
-    s += `<path d="${d}" stroke="#2b3446" stroke-width="6" fill="none" stroke-linecap="round"/>`;
+    s += `<path${rid} d="${d}" stroke="#2b3446" stroke-width="6" fill="none" stroke-linecap="round"/>`;
   }
   // destination pin(s) — labels only when a single pin is shown (all-pins map is crowded)
   if(opts.pins==='all') s += DESTS.map(d=>pinTeardrop(d, true, false)).join('');
@@ -193,6 +222,10 @@ function navMapSVG(opts){
     s += `<g><animateMotion dur="2.6s" fill="freeze" keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines="0.4 0 0.2 1" path="${ap}"/>`
        + `<g transform="translate(-24,-18)"><svg x="0" y="0" width="48" height="33" viewBox="0 0 220 150" overflow="visible">${carInner(opts.carId)}</svg></g></g>`;
   }
+  // live token driven by JS along #liveroute (riding screen)
+  if(opts.live && opts.carId){
+    s += `<g id="livecar" transform="translate(${o.x},${o.y})"><g transform="translate(-24,-18)"><svg x="0" y="0" width="48" height="33" viewBox="0 0 220 150" overflow="visible">${carInner(opts.carId)}</svg></g></g>`;
+  }
   s += `</svg>`; return s;
 }
 /* kept name so older callers still work */
@@ -203,14 +236,30 @@ function mapSVG(){ return navMapSVG({ pins:'all' }); }
    Each returns an SVG sized to the .ridestage (360x230); the car
    and moving road strip are layered on top by the screen.
    ============================================================ */
-function sceneSVG(type){
-  const sky = { city:['#cfe0f5','#eaf2fb'], forest:['#bfe8ff','#e7f7ff'], school:['#cfeaff','#eef8ff'],
+function sceneSVG(type, world){
+  world = world || { time:'day', weather:'none' };
+  const base = { city:['#cfe0f5','#eaf2fb'], forest:['#bfe8ff','#e7f7ff'], school:['#cfeaff','#eef8ff'],
                 sea:['#8fd3f4','#d6f0ff'], houses:['#ffe6c7','#fff4e3'], park:['#d9c9ff','#f0e9ff'],
                 kinder:['#ffe0ef','#fff2f8'], singapore:['#ffd9a8','#ffeccb'] }[type] || ['#a9e2ff','#e7f7ff'];
+  let sky = base;
+  if(world.time==='sunset')      sky=['#ff9e6d','#ffd9a8'];
+  else if(world.time==='night')  sky=['#1e2a4d','#43537f'];
+  else if(world.weather==='rain') sky=['#9fb0c4','#c7d3e0'];
+  else if(world.weather==='snow') sky=['#ccd8e8','#eef4fb'];
+  const uid = `sc_${type}_${world.time}_${world.weather}`;
   let s = `<svg viewBox="0 0 360 230" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">`;
-  s += `<defs><linearGradient id="sc_${type}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${sky[0]}"/><stop offset="1" stop-color="${sky[1]}"/></linearGradient></defs>`;
-  s += `<rect width="360" height="230" fill="url(#sc_${type})"/>`;
-  s += `<circle cx="308" cy="40" r="26" fill="#fff3b0"/><circle cx="308" cy="40" r="26" fill="none" stroke="#ffe27a" stroke-width="8" opacity=".45"/>`;
+  s += `<defs><linearGradient id="${uid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${sky[0]}"/><stop offset="1" stop-color="${sky[1]}"/></linearGradient></defs>`;
+  s += `<rect width="360" height="230" fill="url(#${uid})"/>`;
+  // sun / moon / clouds
+  if(world.time==='night'){
+    s += `<circle cx="308" cy="40" r="22" fill="#fdf6d8"/><circle cx="298" cy="34" r="20" fill="${sky[0]}"/>`; // crescent moon
+    s += `<g fill="#fff">${[[40,30],[90,54],[150,26],[210,44],[264,30],[120,70],[190,80]].map(([x,y])=>`<circle cx="${x}" cy="${y}" r="1.8"/>`).join('')}</g>`;
+  } else if(world.weather==='rain' || world.weather==='snow'){
+    s += `<g fill="#ffffff" opacity=".92"><ellipse cx="300" cy="42" rx="30" ry="16"/><ellipse cx="276" cy="48" rx="22" ry="13"/><ellipse cx="322" cy="50" rx="20" ry="12"/></g>`;
+  } else {
+    const sy = world.time==='sunset' ? 92 : 40, sr = world.time==='sunset' ? 34 : 26, sc = world.time==='sunset' ? '#ff7a45' : '#fff3b0';
+    s += `<circle cx="308" cy="${sy}" r="${sr}" fill="${sc}"/><circle cx="308" cy="${sy}" r="${sr}" fill="none" stroke="#ffe27a" stroke-width="8" opacity=".45"/>`;
+  }
   if(type==='city'){
     s += `<g fill="#9fb4d4" opacity=".55"><rect x="30" y="70" width="34" height="90" rx="3"/><rect x="74" y="52" width="26" height="108" rx="3"/><rect x="110" y="84" width="30" height="76" rx="3"/><rect x="250" y="60" width="30" height="100" rx="3"/><rect x="290" y="80" width="34" height="80" rx="3"/></g>`;
     s += `<g fill="#7f97bd"><rect x="150" y="44" width="40" height="116" rx="4"/><rect x="196" y="66" width="30" height="94" rx="4"/></g>`;
@@ -259,9 +308,27 @@ function sceneSVG(type){
     // palm tree
     s += `<g transform="translate(304,150)"><path d="M0 0 Q-4 -34 2 -50" stroke="#8a5a34" stroke-width="6" fill="none"/><g fill="#3fae5b"><path d="M2 -50 Q-24 -56 -34 -44 Q-14 -50 2 -46 Z"/><path d="M2 -50 Q28 -56 38 -44 Q18 -50 2 -46 Z"/><path d="M2 -50 Q-10 -74 -26 -78 Q-8 -66 2 -48 Z"/><path d="M2 -50 Q14 -74 30 -78 Q12 -66 2 -48 Z"/></g></g>`;
   }
+  // time-of-day tint over the whole scene (cheap way to unify the mood)
+  if(world.time==='night')       s += `<rect width="360" height="230" fill="#1a2340" opacity=".34"/>`;
+  else if(world.time==='sunset') s += `<rect width="360" height="230" fill="#ff8a3d" opacity=".14"/>`;
+  else if(world.weather==='rain') s += `<rect width="360" height="230" fill="#5a6b86" opacity=".12"/>`;
   // near ground / sidewalk band (car + roadstrip sit here)
-  s += `<rect x="0" y="196" width="360" height="34" fill="#c3ccd8"/>`;
+  s += `<rect x="0" y="196" width="360" height="34" fill="${world.time==='night'?'#3a4460':'#c3ccd8'}"/>`;
   s += `</svg>`; return s;
+}
+
+/* weather particles as a CSS-animated overlay (added over the ride stage by the screen) */
+function weatherOverlayHTML(world){
+  if(!world || world.weather==='none') return '';
+  if(world.weather==='rain'){
+    let d=''; for(let i=0;i<28;i++){ d+=`<span class="drop" style="left:${Math.round(Math.random()*100)}%;animation-delay:${(Math.random()*1).toFixed(2)}s;animation-duration:${(0.5+Math.random()*0.4).toFixed(2)}s"></span>`; }
+    return `<div class="weatherlayer rain">${d}</div>`;
+  }
+  if(world.weather==='snow'){
+    let d=''; for(let i=0;i<26;i++){ d+=`<span class="flake" style="left:${Math.round(Math.random()*100)}%;animation-delay:${(Math.random()*3).toFixed(2)}s;animation-duration:${(2.4+Math.random()*2).toFixed(2)}s;font-size:${(8+Math.random()*10).toFixed(0)}px">❄</span>`; }
+    return `<div class="weatherlayer snow">${d}</div>`;
+  }
+  return '';
 }
 
 /* ---- hero backdrop for the top page ---- */

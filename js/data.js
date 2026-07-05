@@ -30,10 +30,12 @@ const DESTS = [
 const PINCOLOR = { shibuya:'#ff4b3e', daikanyama:'#4fc06a', komaba:'#ffab2e', fujisawa:'#3d8bff', kakio:'#ff7a45', chiba:'#9b6bff', kohei:'#ff8a3d', inter:'#2f9bff', yochien:'#ff5fa2', singapore:'#12b886' };
 
 /* The fleet. `art` tells art.js how to draw each one. Add more here anytime.
-   mult = price multiplier vs baseFare · wait = pickup minutes · tier = label shown in the ride list */
+   mult = price multiplier vs baseFare · wait = pickup minutes · tier = label shown in the ride list
+   selfDriving = no human driver (robo-taxi) */
 const CARS = [
   { id:'taxi',      jp:'タクシー',         en:'Taxi',        art:{kind:'taxi'},                                        mult:1.0, wait:3, tier:'ふつう'    },
   { id:'sedan',     jp:'セダンタクシー',   en:'Sedan Taxi',  art:{kind:'sedan-taxi'},                                  mult:1.2, wait:4, tier:'ゆったり'  },
+  { id:'robotaxi',  jp:'じどう うんてんタクシー', en:'Robo-Taxi', art:{kind:'robotaxi', body:'#e3e9f2'}, selfDriving:true, mult:2.2, wait:2, tier:'じどう'    },
   { id:'ferrari',   jp:'フェラーリ',       en:'Ferrari',     art:{kind:'sport', body:'#ff2a1a', emblem:'#ffd400'},     mult:2.6, wait:6, tier:'スーパーカー' },
   { id:'porsche',   jp:'ポルシェ',         en:'Porsche',     art:{kind:'sport', body:'#d4d8de', stroke:'#c4c9d2', emblem:'#c8102e'}, mult:2.8, wait:6, tier:'スーパーカー' },
   { id:'aston',     jp:'アストンマーティン', en:'Aston Martin', art:{kind:'sport', body:'#17604a', emblem:'#0e3d2e'}, mult:2.9, wait:7, tier:'スーパーカー' },
@@ -89,68 +91,159 @@ function orderItems(){ return SNACKS.concat(DRINKS); }
 function orderList(order){ const all=orderItems(); return Object.keys(order||{}).filter(id=>order[id]).map(id=>all.find(x=>x.id===id)).filter(Boolean); }
 function orderTotal(order){ return orderList(order).reduce((t,it)=>t+it.yen,0); }
 
-/* Cute drivers. One is picked (by ride count, so it feels stable within a session)
-   whenever a car is on the way. Spaceship gets its own alien driver. */
+/* ---- drivers (collect them all in the Driver-Dex!) ---- */
 const DRIVERS = [
-  { jp:'たろう',       en:'Taro',    face:'👨',    rating:4.9 },
-  { jp:'はなこ',       en:'Hanako',  face:'👩',    rating:5.0 },
-  { jp:'けんた',       en:'Kenta',   face:'🧑',    rating:4.8 },
-  { jp:'ゆき',         en:'Yuki',    face:'👩‍🦰', rating:4.9 },
-  { jp:'ロボくん',     en:'Robo',    face:'🤖',    rating:5.0 },
-  { jp:'おじいちゃん', en:'Grandpa', face:'👴',    rating:4.7 },
+  { id:'taro',     jp:'たろう',       en:'Taro',     face:'👨', rating:4.9 },
+  { id:'hanako',   jp:'はなこ',       en:'Hanako',   face:'👩', rating:5.0 },
+  { id:'kenta',    jp:'けんた',       en:'Kenta',    face:'🧑', rating:4.8 },
+  { id:'yuki',     jp:'ゆき',         en:'Yuki',     face:'👧', rating:4.9 },
+  { id:'robo',     jp:'ロボくん',     en:'Robo',     face:'🤖', rating:5.0 },
+  { id:'grandpa',  jp:'おじいちゃん', en:'Grandpa',  face:'👴', rating:4.7 },
+  { id:'neko',     jp:'ねこドライバー', en:'Cat',    face:'🐱', rating:5.0 },
+  { id:'inu',      jp:'いぬドライバー', en:'Dog',    face:'🐶', rating:4.9 },
+  { id:'kuma',     jp:'くまさん',     en:'Bear',     face:'🐻', rating:4.8 },
+  { id:'panda',    jp:'パンダ',       en:'Panda',    face:'🐼', rating:4.9 },
+  { id:'penguin',  jp:'ペンギン',     en:'Penguin',  face:'🐧', rating:4.9 },
+  { id:'unicorn',  jp:'ユニコーン',   en:'Unicorn',  face:'🦄', rating:5.0 },
+  { id:'santa',    jp:'サンタさん',   en:'Santa',    face:'🎅', rating:5.0 },
+  { id:'ninja',    jp:'にんじゃ',     en:'Ninja',    face:'🥷', rating:4.9 },
+  { id:'fox',      jp:'きつね',       en:'Fox',      face:'🦊', rating:4.8 },
+  { id:'princess', jp:'おひめさま',   en:'Princess', face:'👸', rating:5.0 },
+  { id:'hero',     jp:'ヒーロー',     en:'Hero',     face:'🦸', rating:5.0 },
+  { id:'wizard',   jp:'まほうつかい', en:'Wizard',   face:'🧙', rating:4.9 },
 ];
-const ALIEN_DRIVER = { jp:'エイリアン', en:'Alien', face:'👽', rating:5.0 };
-const PLATES = ['しながわ 500 あ 12-34','せたがや 300 は 88-88','ねりま 501 の 7-77','よこはま 300 ら 21-09','なにわ 500 き 55-51'];
+/* specials tied to particular cars — also collectible */
+const SPECIAL_DRIVERS = [
+  { id:'alien', jp:'エイリアン',       en:'Alien',           face:'👽', rating:5.0, special:true },
+  { id:'auto',  jp:'じどう うんてん', en:'Self-driving AI', face:'🚗', rating:5.0, special:true },
+];
+function allDrivers(){ return DRIVERS.concat(SPECIAL_DRIVERS); }
+function driverById(id){ return allDrivers().find(d=>d.id===id); }
+const PLATES = ['しながわ 500 あ 12-34','せたがや 300 は 88-88','ねりま 501 の 7-77','よこはま 300 ら 21-09','なにわ 500 き 55-51','とちぎ 480 め 3-14'];
 
 function driverFor(carId, seed){
-  if(carId==='uchusen') return { ...ALIEN_DRIVER, plate:'うちゅう ★★ 00-01' };
+  const car = CARS.find(c=>c.id===carId);
+  if(car && car.selfDriving) return { ...SPECIAL_DRIVERS[1], plate:'AI ★ 00-00' };  // auto
+  if(carId==='uchusen')      return { ...SPECIAL_DRIVERS[0], plate:'うちゅう ★★ 00-01' }; // alien
   const s = Math.abs(seed||0);
   const d = DRIVERS[s % DRIVERS.length];
   return { ...d, plate: PLATES[s % PLATES.length] };
 }
-/* soft background tint for the driver avatar bubble */
+/* soft background tint for the driver avatar bubble (deterministic pastel fallback) */
 function driverColor(drv){
-  const map = { '👨':'#cfe3ff','👩':'#ffd6e6','🧑':'#d6f0d8','👩‍🦰':'#ffe1cf','🤖':'#d8dee8','👴':'#eee0cf','👽':'#dce9c9' };
-  return (drv && map[drv.face]) || '#e6ecf5';
+  const map = { '👨':'#cfe3ff','👩':'#ffd6e6','🧑':'#d6f0d8','👧':'#ffe1cf','🤖':'#d8dee8','👴':'#eee0cf',
+    '🐱':'#ffe3c2','🐶':'#e7dcc7','🐻':'#e8d6bf','🐼':'#e6e9ee','🐧':'#cfe6f5','🦄':'#f3dcff','🎅':'#ffd4d4',
+    '🥷':'#d7dbe2','🦊':'#ffdcc0','👸':'#ffd9ec','🦸':'#d6e3ff','🧙':'#e0d6f2','👽':'#dce9c9','🚗':'#d6e6f5' };
+  if(drv && map[drv.face]) return map[drv.face];
+  const pastels=['#ffe0ef','#e2f0ff','#e7f7d9','#fff0d6','#efe6ff','#d9f5ee'];
+  const c = drv && drv.id ? drv.id.charCodeAt(0) : 0;
+  return pastels[c % pastels.length];
+}
+
+/* ---- pets that ride along ---- */
+const PETS = [
+  { id:'dog',     jp:'いぬ',       en:'Dog',     emoji:'🐶' },
+  { id:'cat',     jp:'ねこ',       en:'Cat',     emoji:'🐱' },
+  { id:'rabbit',  jp:'うさぎ',     en:'Rabbit',  emoji:'🐰' },
+  { id:'bear',    jp:'くま',       en:'Bear',    emoji:'🐻' },
+  { id:'panda',   jp:'パンダ',     en:'Panda',   emoji:'🐼' },
+  { id:'penguin', jp:'ペンギン',   en:'Penguin', emoji:'🐧' },
+  { id:'dino',    jp:'きょうりゅう', en:'Dino',   emoji:'🦖' },
+  { id:'unicorn', jp:'ユニコーン', en:'Unicorn', emoji:'🦄' },
+];
+function petById(id){ return PETS.find(p=>p.id===id); }
+
+/* ---- taxi decorations ---- */
+const DECOR_ACCESSORIES = [
+  { id:'none',    jp:'なし',       en:'None',    emoji:'' },
+  { id:'crown',   jp:'おうかん',   en:'Crown',   emoji:'👑' },
+  { id:'flag',    jp:'はた',       en:'Flag',    emoji:'🚩' },
+  { id:'balloon', jp:'ふうせん',   en:'Balloon', emoji:'🎈' },
+  { id:'star',    jp:'ほし',       en:'Star',    emoji:'⭐' },
+  { id:'flower',  jp:'おはな',     en:'Flower',  emoji:'🌸' },
+  { id:'ribbon',  jp:'リボン',     en:'Ribbon',  emoji:'🎀' },
+  { id:'sparkle', jp:'ぴかぴか',   en:'Sparkle', emoji:'✨' },
+];
+const DECOR_STICKERS = ['❤️','⭐','🌈','🌼','🔥','⚡','🎵','😄','🐾','⚽','🏁','💖'];
+const DECOR_MAX_STICKERS = 3;
+
+/* ---- world: time of day + weather ---- */
+const WORLDS = [
+  { id:'day',    jp:'ひるま',   en:'Day',    emoji:'☀️', time:'day',    weather:'none' },
+  { id:'sunset', jp:'ゆうがた', en:'Sunset', emoji:'🌇', time:'sunset', weather:'none' },
+  { id:'night',  jp:'よる',     en:'Night',  emoji:'🌙', time:'night',  weather:'none' },
+  { id:'rain',   jp:'あめ',     en:'Rain',   emoji:'🌧️', time:'day',    weather:'rain' },
+  { id:'snow',   jp:'ゆき',     en:'Snow',   emoji:'❄️', time:'day',    weather:'snow' },
+];
+function worldFor(id){ return WORLDS.find(w=>w.id===id) || WORLDS[0]; }
+function currentWorld(){ return worldFor(PROFILE.world); }
+
+/* ---- compliments given when rating a driver ---- */
+const COMPLIMENTS = [
+  { id:'fun',    jp:'たのしかった',       en:'Fun!',          emoji:'😄' },
+  { id:'kind',   jp:'しんせつ',           en:'Kind',          emoji:'💛' },
+  { id:'smooth', jp:'うんてん じょうず',  en:'Great driving', emoji:'👍' },
+  { id:'fast',   jp:'はやい',             en:'Fast',          emoji:'⚡' },
+  { id:'clean',  jp:'きれい',             en:'Clean car',     emoji:'✨' },
+  { id:'cool',   jp:'かっこいい',         en:'Cool',          emoji:'😎' },
+];
+
+/* ---- missions ---- */
+const MISSIONS = [
+  { id:'ride3',    icon:'🚕', jp:'3かい のろう',            en:'Ride 3 times',        goal:3,             reward:50,  prog:()=>PROFILE.rides },
+  { id:'places',   icon:'📍', jp:'ぜんぶの ばしょへ いこう', en:'Visit every place',  goal:DESTS.length,  reward:200, prog:()=>Object.keys(PROFILE.places).length },
+  { id:'cars5',    icon:'🚗', jp:'くるまを 5だい あつめよう', en:'Collect 5 cars',    goal:5,             reward:100, prog:()=>Object.keys(PROFILE.seenCars).length },
+  { id:'drivers5', icon:'🧑', jp:'ドライバー 5にんに あおう', en:'Meet 5 drivers',    goal:5,             reward:100, prog:()=>Object.keys(PROFILE.seenDrivers||{}).length },
+  { id:'snack',    icon:'🍪', jp:'おやつを ちゅうもんしよう', en:'Order a snack',     goal:1,             reward:30,  prog:()=>PROFILE.snacksOrdered||0 },
+  { id:'streak3',  icon:'🔥', jp:'3にち つづけて のろう',    en:'Ride 3 days in a row', goal:3,          reward:120, prog:()=>PROFILE.streak?PROFILE.streak.count:0 },
+  { id:'ride10',   icon:'🏆', jp:'10かい のろう',           en:'Ride 10 times',       goal:10,            reward:150, prog:()=>PROFILE.rides },
+];
+function missionProgress(m){ return Math.min(m.goal, m.prog()); }
+function missionDone(m){ return m.prog() >= m.goal; }
+
+/* ---- daily streak ---- */
+function todayKey(){ const d=new Date(); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+function yesterdayKey(){ const d=new Date(); d.setDate(d.getDate()-1); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+function updateStreak(){
+  const t=todayKey(); const s=PROFILE.streak||{count:0,last:null};
+  if(s.last!==t){ s.count = (s.last===yesterdayKey()) ? (s.count+1) : 1; s.last=t; }
+  PROFILE.streak=s; return s;
 }
 
 /* Player profile — accumulates during the session and (in Claude Code / a real
-   project) is saved to localStorage so it survives a refresh.
-   carCounts[id] = rides in that car · seenCars[id] = true once picked (garage) */
-const PROFILE = {
+   project) is saved to localStorage so it survives a refresh. */
+const PROFILE_DEFAULT = () => ({
   name: CONFIG.name, nameEn: CONFIG.nameEn, age: CONFIG.age,
-  rides: 0, points: 0, places: {}, carCounts: {}, seenCars: {}
-};
+  rides:0, points:0, coins:0,
+  places:{}, carCounts:{}, seenCars:{},
+  seenDrivers:{}, driverCounts:{}, driverStars:{},
+  decor:{ accessory:'none', stickers:[] }, world:'day', lastPet:'',
+  streak:{ count:0, last:null }, missionsDone:{}, snacksOrdered:0
+});
+const PROFILE = PROFILE_DEFAULT();
 
 /* ---- persistence (localStorage; silently no-ops where storage is blocked) ---- */
+const SAVE_KEYS = ['rides','points','coins','places','carCounts','seenCars','seenDrivers','driverCounts',
+  'driverStars','decor','world','lastPet','streak','missionsDone','snacksOrdered'];
 function loadProfile(){
   try{
     const raw = localStorage.getItem(CONFIG.storeKey);
     if(!raw) return;
     const saved = JSON.parse(raw);
-    Object.assign(PROFILE, {
-      rides:  saved.rides  || 0,
-      points: saved.points || 0,
-      places: saved.places || {},
-      carCounts: saved.carCounts || {},
-      seenCars:  saved.seenCars  || {},
-    });
-    // keep name/age in sync with the current CONFIG (child may have been renamed)
-    PROFILE.name = CONFIG.name; PROFILE.nameEn = CONFIG.nameEn; PROFILE.age = CONFIG.age;
+    const def = PROFILE_DEFAULT();
+    SAVE_KEYS.forEach(k=>{ if(saved[k]!==undefined) PROFILE[k]=saved[k]; else PROFILE[k]=def[k]; });
+    if(!PROFILE.decor) PROFILE.decor={ accessory:'none', stickers:[] };
+    if(!PROFILE.streak) PROFILE.streak={ count:0, last:null };
+    PROFILE.name=CONFIG.name; PROFILE.nameEn=CONFIG.nameEn; PROFILE.age=CONFIG.age;
   }catch(e){ /* storage unavailable — run in-memory only */ }
 }
 function saveProfile(){
   try{
-    localStorage.setItem(CONFIG.storeKey, JSON.stringify({
-      rides: PROFILE.rides, points: PROFILE.points,
-      places: PROFILE.places, carCounts: PROFILE.carCounts, seenCars: PROFILE.seenCars
-    }));
+    const out={}; SAVE_KEYS.forEach(k=>out[k]=PROFILE[k]);
+    localStorage.setItem(CONFIG.storeKey, JSON.stringify(out));
   }catch(e){ /* ignore */ }
 }
-function resetProfile(){
-  PROFILE.rides=0; PROFILE.points=0; PROFILE.places={}; PROFILE.carCounts={}; PROFILE.seenCars={};
-  saveProfile();
-}
+function resetProfile(){ Object.assign(PROFILE, PROFILE_DEFAULT()); saveProfile(); }
 
 /* Driver ranks by number of rides (used on MyPage) */
 function levelFor(rides){

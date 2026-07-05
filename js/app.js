@@ -4,31 +4,34 @@
    ============================================================ */
 
 const RIDE_MS = CONFIG.rideMs;
-const state = { screen:'top', dest:null, car:null, driver:null, fare:CONFIG.baseFare, pay:null,
-                points:0, order:{}, paidTotal:0, justUnlocked:false };
-let ride=null, navTimer=null;
+const state = { screen:'top', dest:null, car:null, driver:null, pet:'', fare:CONFIG.baseFare, pay:null,
+                points:0, order:{}, paidTotal:0, justUnlocked:false, rating:5, compliments:[], newMissions:[] };
+let ride=null, navTimer=null, etaTimer=null;
 function clearRide(){ if(ride){ clearInterval(ride); ride=null; } }
 function clearNav(){ if(navTimer){ clearTimeout(navTimer); navTimer=null; } }
+function clearEta(){ if(etaTimer){ clearInterval(etaTimer); etaTimer=null; } }
 
 const SCREENS = {
   top:topScreen, home:homeScreen, cars:carsScreen, searching:searchingScreen, found:foundScreen,
-  coming:comingScreen, riding:ridingScreen, pay:payScreen, done:doneScreen, mypage:myPageScreen,
-  garage:garageScreen
+  coming:comingScreen, riding:ridingScreen, pay:payScreen, rate:rateScreen, done:doneScreen,
+  mypage:myPageScreen, garage:garageScreen, driverdex:driverDexScreen, decorate:decorateScreen,
+  missions:missionsScreen
 };
 
 function render(){
-  clearRide(); clearNav();
+  clearRide(); clearNav(); clearEta();
   const v=document.getElementById('view');
   v.innerHTML=(SCREENS[state.screen]||topScreen)();
   const sc=v.querySelector('.scroll'); if(sc) sc.scrollTop=0;
   if(state.screen==='cars')      setTimeout(initSlider,60);
   if(state.screen==='searching'){ sfx.go(); navTimer=setTimeout(goFound,2300); }
   if(state.screen==='found')      setTimeout(()=>sfx.points(),140);
+  if(state.screen==='coming')     setTimeout(startComingEta,90);
   if(state.screen==='riding')     setTimeout(startRide,60);
   if(state.screen==='done')       setTimeout(()=>sfx.points(),120);
 }
 
-/* meter + progress bar simulation while riding */
+/* meter + progress + live-map token + ticking ETA while riding */
 function startRide(){
   state.fare=CONFIG.baseFare;
   const bar=document.getElementById('progbar'); if(bar) requestAnimationFrame(()=>{ bar.style.width='100%'; });
@@ -44,13 +47,32 @@ function startRide(){
       const ob=document.getElementById('offbtn'); if(ob) ob.classList.add('pulse');
     }
   },250);
+  // animate the live-map car token along the route + tick the ETA down
+  const d=DESTS.find(x=>x.id===state.dest);
+  const route=document.getElementById('liveroute'), token=document.getElementById('livecar'), etaEl=document.getElementById('etamin');
+  const totalMin=etaMinutes(d); let len=0; try{ len=route?route.getTotalLength():0; }catch(_){}
+  (function frame(now){
+    if(state.screen!=='riding') return;
+    const pr=Math.min(1,(now-t0)/RIDE_MS);
+    if(route && token && len){ const pt=route.getPointAtLength(len*pr); token.setAttribute('transform','translate('+pt.x+','+pt.y+')'); }
+    if(etaEl) etaEl.textContent=Math.max(0,Math.ceil(totalMin*(1-pr)));
+    if(pr<1) requestAnimationFrame(frame);
+  })(t0);
 }
 
-/* ---- slide-to-confirm (works with touch via Pointer Events) ---- */
+/* pickup screen: tick the ETA minutes down while the car drives in */
+function startComingEta(){
+  const c=CARS.find(x=>x.id===state.car), el=document.getElementById('etamin'); if(!c||!el) return;
+  let m=c.wait; const step=Math.max(300, Math.round(2600/Math.max(1,c.wait)));
+  etaTimer=setInterval(()=>{ m--; if(m<=0){ el.textContent='0'; clearEta();
+      const chip=el.closest('.etachip'); if(chip) chip.classList.add('arrived');
+      const b=document.getElementById('getinbtn'); if(b) b.classList.add('pulse');
+    } else el.textContent=m; }, step);
+}
+
+/* ---- slide-to-confirm (Pointer Events → works by touch) ---- */
 function initSlider(){
-  const wrap=document.getElementById('slideconfirm');
-  const knob=document.getElementById('slknob');
-  const fill=document.getElementById('slfill');
+  const wrap=document.getElementById('slideconfirm'), knob=document.getElementById('slknob'), fill=document.getElementById('slfill');
   if(!wrap||!knob) return;
   const pad=5; let x=0, max=0, dragging=false, startX=0;
   function layout(){ max=Math.max(0, wrap.clientWidth - knob.offsetWidth - pad*2); }
@@ -87,14 +109,57 @@ function confirmOrder(){ state.order=Object.assign({}, pendingOrder); sfx.pay();
   closeOrder();
 }
 
-/* ---- navigation (declared as functions so inline onclick can find them) ---- */
+/* ---- self-driving controls + toast ---- */
+function honk(){ sfx.horn(); toast('📣 プップー！'); }
+function pullOver(){ sfx.ding(); toast('✋ とまったよ！ / Stopped'); }
+function toast(msg){ const el=document.createElement('div'); el.className='toast'; el.textContent=msg;
+  (document.querySelector('.app')||document.body).appendChild(el);
+  requestAnimationFrame(()=>el.classList.add('show'));
+  setTimeout(()=>{ el.classList.remove('show'); setTimeout(()=>el.remove(),250); }, 1100);
+}
+
+/* ---- world / pet / decorate setters ---- */
+function setWorld(id){ PROFILE.world=id; saveProfile(); sfx.select(); render(); }
+function pickPet(id){ state.pet=id; if(id) PROFILE.lastPet=id; sfx.select(); render(); }
+function setAccessory(id){ PROFILE.decor.accessory=id; saveProfile(); sfx.select(); render(); }
+function toggleSticker(em){ const st=PROFILE.decor.stickers||(PROFILE.decor.stickers=[]);
+  const i=st.indexOf(em);
+  if(i>=0) st.splice(i,1);
+  else { if(st.length>=DECOR_MAX_STICKERS){ sfx.tap(); return; } st.push(em); }
+  saveProfile(); sfx.select(); render();
+}
+
+/* ---- rating ---- */
+function setRating(n){ state.rating=n; sfx.select(); render(); }
+function toggleCompliment(id){ state.compliments=state.compliments||[];
+  const i=state.compliments.indexOf(id); if(i>=0) state.compliments.splice(i,1); else state.compliments.push(id);
+  sfx.tap(); render();
+}
+function finishRate(){ sfx.points();
+  if(state.driver && state.driver.id) PROFILE.driverStars[state.driver.id]=state.rating||5;
+  saveProfile(); state.screen='done'; render();
+}
+
+/* newly-completed missions get their reward once */
+function checkMissions(){
+  const newly=[];
+  MISSIONS.forEach(m=>{ if(missionDone(m) && !PROFILE.missionsDone[m.id]){
+    PROFILE.missionsDone[m.id]=true; PROFILE.points+=m.reward; PROFILE.coins+=Math.round(m.reward/10); newly.push(m);
+  }});
+  return newly;
+}
+
+/* ---- navigation ---- */
 function goTop(){ clearRide(); sfx.tap(); state.screen='top'; render(); }
 function goPlaces(){ clearRide(); sfx.tap();
-  state.screen='home'; state.dest=null; state.car=null; state.driver=null; state.pay=null;
-  state.order={}; state.paidTotal=0; state.justUnlocked=false; render();
+  state.screen='home'; state.dest=null; state.car=null; state.driver=null; state.pet=''; state.pay=null;
+  state.order={}; state.paidTotal=0; state.justUnlocked=false; state.rating=5; state.compliments=[]; state.newMissions=[]; render();
 }
 function goMyPage(){ sfx.tap(); state.screen='mypage'; render(); }
 function goGarage(){ sfx.tap(); state.screen='garage'; render(); }
+function goDriverDex(){ sfx.tap(); state.screen='driverdex'; render(); }
+function goDecorate(){ sfx.tap(); state.screen='decorate'; render(); }
+function goMissions(){ sfx.tap(); state.screen='missions'; render(); }
 function pick(id){ sfx.select(); state.dest=id; state.car=null; state.driver=null; state.order={}; state.screen='cars'; render(); }
 function pickCar(id){ const c=CARS.find(x=>x.id===id);
   if(c && !carUnlocked(c)) return;                       // locked: ignore taps
@@ -103,7 +168,10 @@ function pickCar(id){ const c=CARS.find(x=>x.id===id);
   if(!PROFILE.seenCars[id]){ PROFILE.seenCars[id]=true; saveProfile(); }  // garage: mark discovered
   render();
 }
-function assignDriver(){ if(!state.driver){ const seed=PROFILE.rides+CARS.findIndex(x=>x.id===state.car); state.driver=driverFor(state.car,seed); } }
+function assignDriver(){
+  if(!state.driver){ const seed=PROFILE.rides+CARS.findIndex(x=>x.id===state.car); state.driver=driverFor(state.car,seed); }
+  if(state.driver && state.driver.id && !PROFILE.seenDrivers[state.driver.id]){ PROFILE.seenDrivers[state.driver.id]=true; saveProfile(); }
+}
 function goSearching(){ if(!state.car) return; assignDriver(); state.screen='searching'; render(); }
 function goFound(){ clearNav(); sfx.ding(); state.screen='found'; render(); }
 function goComing(){ if(!state.car) return; sfx.tap(); assignDriver(); state.screen='coming'; render(); }
@@ -115,22 +183,29 @@ function pickPay(id){
   const snacks=orderTotal(state.order), total=state.fare+snacks;
   state.paidTotal=total; state.points=Math.max(20,Math.round(total/10));
   const before = CARS.filter(carUnlocked).length;
-  PROFILE.rides++; PROFILE.points+=state.points; PROFILE.places[state.dest]=true;
+  PROFILE.rides++; PROFILE.points+=state.points; PROFILE.coins+=Math.round(state.points/10);
+  PROFILE.places[state.dest]=true;
   PROFILE.carCounts[state.car]=(PROFILE.carCounts[state.car]||0)+1;
+  if(state.driver && state.driver.id){ PROFILE.driverCounts[state.driver.id]=(PROFILE.driverCounts[state.driver.id]||0)+1; PROFILE.seenDrivers[state.driver.id]=true; }
+  if(orderList(state.order).length) PROFILE.snacksOrdered=(PROFILE.snacksOrdered||0)+1;
+  updateStreak();
+  state.newMissions=checkMissions();
   const after = CARS.filter(carUnlocked).length;
-  state.justUnlocked = after>before;                     // a locked car just became available
+  state.justUnlocked = after>before;
   if(state.justUnlocked) setTimeout(()=>sfx.warp(),700);
-  saveProfile();                                         // persist the ride
-  state.screen='done'; render();
+  saveProfile();
+  state.rating=5; state.compliments=[];
+  state.screen='rate'; render();                         // rate the driver, then done
 }
 function goCars(){ sfx.tap(); state.screen='cars'; render(); }
 function goHome(){ goPlaces(); }               // Back from car picker -> place picker
 function toggleMute(btn){ const m=sfx.toggle(); btn.textContent = m?'🔇':'🔊'; }
 
-/* expose to window for inline handlers (safe even though they're already global) */
-Object.assign(window, { goTop, goPlaces, goMyPage, goGarage, pick, pickCar, goSearching, goFound,
-  goComing, goFoundBack, goRiding, goPay, pickPay, goCars, goHome, toggleMute,
-  openOrder, closeOrder, toggleOrder, confirmOrder });
+/* expose to window for inline handlers */
+Object.assign(window, { goTop, goPlaces, goMyPage, goGarage, goDriverDex, goDecorate, goMissions,
+  pick, pickCar, pickPet, setWorld, setAccessory, toggleSticker, setRating, toggleCompliment, finishRate,
+  goSearching, goFound, goComing, goFoundBack, goRiding, goPay, pickPay, goCars, goHome, toggleMute,
+  openOrder, closeOrder, toggleOrder, confirmOrder, honk, pullOver });
 
 /* start: restore saved profile, then draw */
 loadProfile();
