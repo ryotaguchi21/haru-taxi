@@ -559,4 +559,111 @@ body{
   padding:10px 18px; border-radius:999px; z-index:60; opacity:0; transition:opacity .2s, transform .2s; pointer-events:none; box-shadow:var(--shadow); }
 .toast.show{ opacity:1; transform:translate(-50%,0); }
 
-@media(prefers-reduced-motion:reduce){ *{ animation:none !important; transition:none !important; } .progbar{ width:100% !important; } }
+/* ============================================================
+   ✨ PROFESSIONAL POLISH LAYER
+   Premium-playful: layered depth, glass accents, refined type
+   & motion. Appended last so it refines earlier rules cleanly.
+   ============================================================ */
+:root{
+  --ink:#26324a;
+  --paper:#f3f8fd;
+  --ease:cubic-bezier(.22,.61,.36,1);
+  --ease-spring:cubic-bezier(.2,.9,.3,1.35);
+  --sh1:0 2px 8px rgba(29,52,94,.08);
+  --sh2:0 12px 28px -6px rgba(29,52,94,.20);
+  --sh3:0 26px 54px -10px rgba(29,52,94,.30);
+  --hair:1px solid rgba(255,255,255,.7);
+}
+/* refined sky: soft feathered clouds + smooth gradient */
+body{
+  background:
+    radial-gradient(58% 40% at 22% 15%, rgba(255,255,255,.75), transparent 72%),
+    radial-gradient(46% 32% at 84% 22%, rgba(255,255,255,.6), transparent 72%),
+    radial-gradient(120% 90% at 50% -8%, #fdf3df 0%, transparent 42%),
+    linear-gradient(180deg,#93d8f2 0%, #c3ebfb 50%, #e9f6ff 100%);
+  background-attachment:fixed;
+}
+@media(min-width:520px){
+  .app{ border-radius:38px;
+    box-shadow:0 44px 84px -24px rgba(20,50,90,.48), 0 0 0 10px rgba(255,255,255,.6), inset 0 1px 0 rgba(255,255,255,.6); }
+}
+
+/* frosted mute button */
+.mutebtn{ background:rgba(255,255,255,.72); -webkit-backdrop-filter:blur(12px) saturate(1.4); backdrop-filter:blur(12px) saturate(1.4);
+  border:var(--hair); box-shadow:var(--sh2), inset 0 1px 0 rgba(255,255,255,.85); }
+.mutebtn:active{ transform:translateY(2px) scale(.96); box-shadow:var(--sh1); }
+
+/* top bars: subtle depth + top sheen behind content + safe area */
+.topbar{ padding-top:calc(18px + env(safe-area-inset-top)); box-shadow:0 10px 22px -10px rgba(31,54,96,.30); isolation:isolate; }
+.topbar::after{ content:""; position:absolute; inset:0; z-index:0; pointer-events:none;
+  background:radial-gradient(120% 120% at 50% -50%, rgba(255,255,255,.30), transparent 60%); }
+.topbar>*{ position:relative; z-index:1; }
+.title{ text-wrap:balance; } .bigmsg{ text-wrap:balance; } .hello{ letter-spacing:.05em; }
+
+/* primary buttons: extruded edge + soft ambient + inset highlight + gentle shine */
+.bigcta{ background:linear-gradient(180deg,#66d888,#41b25e); position:relative; overflow:hidden;
+  box-shadow:inset 0 2px 0 rgba(255,255,255,.38), 0 9px 0 var(--green-d), 0 20px 30px -8px rgba(58,158,82,.5); }
+.bigcta::after{ content:""; position:absolute; top:0; left:-60%; width:38%; height:100%; transform:skewX(-18deg);
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.5),transparent); animation:shine 4.2s ease-in-out infinite; }
+@keyframes shine{ 0%{left:-60%} 55%,100%{left:135%} }
+.gobtn{ box-shadow:inset 0 2px 0 rgba(255,255,255,.32), 0 7px 0 var(--green-d), 0 15px 22px -8px rgba(58,158,82,.42); }
+.gobtn.yellow{ box-shadow:inset 0 2px 0 rgba(255,255,255,.5), 0 7px 0 var(--taxi-d), 0 15px 22px -8px rgba(229,167,18,.42); }
+.gobtn:disabled{ box-shadow:0 7px 0 #b3c1d4; }
+
+/* menu buttons: framed icon tiles + layered shadow */
+.menubtn{ box-shadow:0 6px 0 #d7e2f0, 0 14px 22px -10px rgba(31,54,96,.25); border:var(--hair); }
+.menubtn .mpi{ width:54px; height:54px; border-radius:16px; display:grid; place-items:center;
+  background:linear-gradient(180deg,#eff6ff,#e0edfb); box-shadow:inset 0 1px 0 #fff, 0 2px 5px rgba(31,54,96,.08); margin-bottom:3px; }
+
+/* elevate the big display cards with clean soft shadows */
+.mapcard{ box-shadow:var(--sh2); }
+.heroscene{ box-shadow:var(--sh3); position:relative; }
+.heroscene::after{ content:""; position:absolute; inset:0; pointer-events:none; box-shadow:inset 0 0 44px rgba(31,54,96,.14); }
+.profilecard,.favcard,.ptcard,.payfare,.drivercard,.streakcard{ box-shadow:var(--sh2); border:var(--hair); }
+.drivercard{ background:rgba(255,255,255,.9); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); }
+
+/* glass chips */
+.melabel,.etachip{ -webkit-backdrop-filter:blur(10px) saturate(1.3); backdrop-filter:blur(10px) saturate(1.3); border:var(--hair); }
+.melabel{ background:rgba(255,255,255,.72); box-shadow:var(--sh1); }
+.etachip{ background:rgba(255,255,255,.82); box-shadow:var(--sh2); }
+
+/* digital taxi meter (LED look + blinking "in service" light) */
+.meterbox{ background:linear-gradient(180deg,#232b3a,#161b25); border:1px solid #2e3646; overflow:hidden;
+  box-shadow:var(--sh2), inset 0 1px 0 rgba(255,255,255,.07); }
+.meterbox b{ font-variant-numeric:tabular-nums; letter-spacing:.05em; color:#8dffb0;
+  text-shadow:0 0 12px rgba(124,252,154,.55), 0 0 3px rgba(124,252,154,.9); }
+.meterbox .mlab::before{ content:"●"; color:#ff5a4d; margin-right:6px; font-size:.7em; vertical-align:1px;
+  text-shadow:0 0 6px rgba(255,90,77,.85); animation:blink 1.4s steps(1) infinite; }
+@keyframes blink{ 50%{ opacity:.25 } }
+
+/* progress bar: inset track + moving shine */
+.progwrap{ box-shadow:inset 0 2px 5px rgba(31,54,96,.14); }
+.progbar{ position:relative; overflow:hidden; }
+.progbar::after{ content:""; position:absolute; inset:0; transform:translateX(-100%);
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent); animation:progshine 1.7s ease-in-out infinite; }
+@keyframes progshine{ 0%{ transform:translateX(-100%) } 60%,100%{ transform:translateX(100%) } }
+
+/* searching radar: sweeping beam + softer rings */
+.radar{ border-radius:50%; background:radial-gradient(circle, rgba(79,192,106,.08), transparent 68%); }
+.radar::before{ content:""; position:absolute; width:200px; height:200px; border-radius:50%;
+  background:conic-gradient(from 0deg, rgba(79,192,106,.42), rgba(79,192,106,0) 28%); animation:sweep 1.9s linear infinite; }
+@keyframes sweep{ to{ transform:rotate(360deg) } }
+.radar .rw{ border-color:rgba(79,192,106,.55); }
+.radarcar{ position:relative; z-index:2; }
+
+/* frosted bottom sheets */
+.opanel{ background:rgba(243,248,253,.9); -webkit-backdrop-filter:blur(18px) saturate(1.4); backdrop-filter:blur(18px) saturate(1.4);
+  box-shadow:0 -20px 50px rgba(20,50,90,.28); }
+
+/* press feel: consistent subtle scale on tappable tiles */
+.dcard:active,.ccard:active,.ride:active,.paybtn:active,.worldchip:active,.petchip:active,.oitem:active,
+.decoropt:active,.stickeropt:active,.compchip:active,.linkcard:active,.dbtn:active,.sdbtn:active{ transform:translateY(3px) scale(.985); }
+
+/* safe-area padding for bottom action bars */
+.gobar{ padding-bottom:calc(20px + env(safe-area-inset-bottom)); }
+
+/* crisper focus ring */
+:focus-visible{ outline:3px solid var(--blue); outline-offset:3px; border-radius:16px; }
+
+@media(prefers-reduced-motion:reduce){ *{ animation:none !important; transition:none !important; } .progbar{ width:100% !important; }
+  .bigcta::after,.progbar::after,.radar::before{ display:none; } }
