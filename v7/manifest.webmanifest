@@ -1,0 +1,17 @@
+{
+  "name": "たくしー よぼう！ v7 / Haru's Taxi",
+  "short_name": "たくしー v7",
+  "description": "A playful pretend taxi-hailing app for kids — hail a car, pick snacks, and go!",
+  "lang": "ja",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#8ed6f2",
+  "theme_color": "#ffc531",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
