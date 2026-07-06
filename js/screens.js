@@ -13,11 +13,14 @@ function topScreen(){
     <div class="heroscene">${heroBackdropSVG()}<div class="heroufo">${carSVG('uchusen')}</div><div class="herotaxi">${carSVG('taxi')}</div></div>
     <button class="bigcta" onclick="goPlaces()">🚕 タクシーにのる<span class="en">Ride a taxi!</span></button>
     <div class="menugrid">
+      <button class="menubtn" onclick="goGames()"><span class="mpi">🎮</span><b>ミニゲーム</b><span>Games</span></button>
+      <button class="menubtn" onclick="goShop()"><span class="mpi">🛒</span><b>ショップ</b><span>Shop</span></button>
       <button class="menubtn" onclick="goMyPage()"><span class="mpi">👦</span><b>マイページ</b><span>My Page</span></button>
       <button class="menubtn" onclick="goGarage()"><span class="mpi">🚗</span><b>くるまずかん</b><span>Garage</span></button>
       <button class="menubtn" onclick="goDriverDex()"><span class="mpi">🧑</span><b>ドライバーずかん</b><span>Drivers</span></button>
       <button class="menubtn" onclick="goMissions()"><span class="mpi">🎯</span><b>ミッション</b><span>Missions</span></button>
       <button class="menubtn" onclick="goDecorate()"><span class="mpi">🎨</span><b>デコる</b><span>Decorate</span></button>
+      <button class="menubtn" onclick="goSettings()"><span class="mpi">⚙️</span><b>せってい</b><span>Settings</span></button>
     </div>
   </div></div>`;
 }
@@ -38,11 +41,18 @@ function homeScreen(){
 
 /* ---- CARS / ride selector + pet + slide to confirm ---- */
 function petStripHTML(){
-  const cells=[{id:'',jp:'なし',emoji:'🚫'}].concat(PETS).map(p=>{
+  const cells=[{id:'',jp:'なし',emoji:'🚫'}].concat(availablePets()).map(p=>{
     const sel=(state.pet||'')===p.id?' sel':'';
     return `<button class="petchip${sel}" onclick="pickPet('${p.id}')"><span class="pe">${p.emoji}</span><span>${p.jp}</span></button>`;
   }).join('');
   return `<div class="sechead sm"><h2>いっしょに のる<span class="en">Bring a pet</span></h2></div><div class="petstrip">${cells}</div>`;
+}
+function friendStripHTML(){
+  const cells=FRIENDS.map(f=>{
+    const sel=(state.friend||'none')===f.id?' sel':'';
+    return `<button class="petchip${sel}" onclick="pickFriend('${f.id}')"><span class="pe">${f.emoji}</span><span>${f.jp}</span></button>`;
+  }).join('');
+  return `<div class="sechead sm"><h2>ともだちを のせる<span class="en">Pick up a friend</span></h2></div><div class="petstrip">${cells}</div>`;
 }
 function carsScreen(){
   const d=DESTS.find(x=>x.id===state.dest);
@@ -77,6 +87,7 @@ function carsScreen(){
     <div class="scroll"><div class="routemap"><div class="mapcard slim">${navMapSVG({pins:'dest',dest:state.dest,route:true})}</div></div>
     <div class="ridelist">${rows}</div>
     ${petStripHTML()}
+    ${friendStripHTML()}
     <div class="gobar sticky">${confirm}</div></div></div>`;
 }
 
@@ -134,25 +145,37 @@ function comingScreen(){
 /* ---- RIDING / scene + live map + meter + order + (self-driving controls) ---- */
 function ridingScreen(){
   const d=DESTS.find(x=>x.id===state.dest), c=CARS.find(x=>x.id===state.car), w=currentWorld();
-  const sd = c.selfDriving ? `<div class="selfdrive"><div class="sdbadge">🤖 じどう うんてん ちゅう <span>self-driving</span></div>
-    <div class="sdbtns"><button class="sdbtn" onclick="honk()">📣<span>クラクション</span></button><button class="sdbtn stop" onclick="pullOver()">✋<span>とまって</span></button></div></div>` : '';
-  return `<div class="screen"><div class="topbar green"><p class="hello">${c.jp} 🚕💨</p><h1 class="title">ドライブ ちゅう！<span class="en">Riding to ${d.en}</span></h1></div>
-    <div class="scroll">
-      <div class="ridestage"><div class="ridescene">${sceneSVG(d.scene, w)}</div>${weatherOverlayHTML(w)}
-        <div class="ridecar idlecar">${carSVG(c.id,{decor:true,pet:state.pet})}</div><div class="roadstrip"></div>
-        <div class="arrbadge" id="arrbadge">とうちゃく！ 🎉</div></div>
-      <div class="livewrap"><div class="livehead"><span class="navi">🧭 ナビ</span><span class="navto">${d.emoji} ${d.jp}へ</span></div>
-        <div class="mapcard live">${navMapSVG({pins:'dest',dest:state.dest,route:true,live:true,carId:c.id})}</div>
-        <div class="etachip live"><b id="etamin">${etaMinutes(d)}</b><span>ふん<br>min</span></div></div>
+  const driverMode = state.mode==='driver';
+  const rider = driverMode ? state.passenger : state.pet;   // who's shown in the car
+  const fr = (state.friend&&state.friend!=='none') ? friendById(state.friend) : null;
+  const friendChip = fr ? `<div class="ridefriend">${fr.emoji} ${fr.jp} も いっしょ！</div>` : '';
+  const honk = `<div class="honkrow"><button class="honkbtn" onclick="honk()">📣 クラクション<span class="en">Honk!</span></button>${c.selfDriving?'<button class="honkbtn stop" onclick="pullOver()">✋ とまって<span class="en">Stop</span></button>':''}</div>`;
+  const header = driverMode
+    ? `<div class="topbar purple"><p class="hello">🎓 うんてんしゅモード</p><h1 class="title">${d.emoji} ${d.jp} へ おくる<span class="en">You're driving!</span></h1></div>`
+    : `<div class="topbar green"><p class="hello">${c.jp} 🚕💨</p><h1 class="title">ドライブ ちゅう！<span class="en">Riding to ${d.en}</span></h1></div>`;
+  const meterBlock = driverMode ? '' : `
       <div class="meterbox"><span class="mlab">メーター<small>meter</small></span><b id="meter">¥${CONFIG.baseFare}</b></div>
-      <div class="progwrap"><div class="progbar" id="progbar"></div></div>
-      ${sd}
       <div class="orderrow">
         <button class="orderbtn" onclick="openOrder()">🍽️ たべもの・のみものを ちゅうもんする<span class="en">Order snacks &amp; drinks</span></button>
         <div class="ordertray" id="ordertray">${orderTrayHTML()}</div>
-      </div>
+      </div>`;
+  const bottom = driverMode
+    ? `<div class="gobar"><button class="gobtn yellow" id="offbtn" onclick="goDriverDrop()">とうちゃく！ おろす <span class="en">Drop off →</span></button></div>`
+    : `<div class="gobar"><button class="gobtn yellow" id="offbtn" onclick="goPay()">おりて はらう <span class="en">Get off &amp; pay →</span></button></div>`;
+  return `<div class="screen">${header}
+    <div class="scroll">
+      <div class="ridestage"><div class="ridescene">${sceneSVG(d.scene, w)}</div>${weatherOverlayHTML(w)}
+        <div class="ridecar idlecar">${carSVG(c.id,{decor:true,pet:rider})}</div><div class="roadstrip"></div>
+        <div class="arrbadge" id="arrbadge">とうちゃく！ 🎉</div></div>
+      ${friendChip}
+      <div class="livewrap"><div class="livehead"><span class="navi">🧭 ナビ</span><span class="navto">${d.emoji} ${d.jp}へ</span></div>
+        <div class="mapcard live">${navMapSVG({pins:'dest',dest:state.dest,route:true,live:true,carId:c.id})}</div>
+        <div class="etachip live"><b id="etamin">${etaMinutes(d)}</b><span>ふん<br>min</span></div></div>
+      <div class="progwrap"><div class="progbar" id="progbar"></div></div>
+      ${meterBlock}
+      ${honk}
       <p class="maphint">${d.emoji} ${d.jp} まで あと ちょっと！ almost at ${d.en}</p>
-      <div class="gobar"><button class="gobtn yellow" id="offbtn" onclick="goPay()">おりて はらう <span class="en">Get off &amp; pay →</span></button></div>
+      ${bottom}
     </div></div>`;
 }
 function orderTrayHTML(){
@@ -287,12 +310,13 @@ function driverDexScreen(){
 function decorateScreen(){
   const decor=PROFILE.decor||{accessory:'none',stickers:[]};
   const previewCar='taxi';
-  const acc=DECOR_ACCESSORIES.map(a=>`<button class="decoropt${decor.accessory===a.id?' on':''}" onclick="setAccessory('${a.id}')"><span class="doe">${a.emoji||'🚫'}</span><span>${a.jp}</span></button>`).join('');
+  const acc=availableAccessories().map(a=>`<button class="decoropt${decor.accessory===a.id?' on':''}" onclick="setAccessory('${a.id}')"><span class="doe">${a.emoji||'🚫'}</span><span>${a.jp}</span></button>`).join('');
   const stk=DECOR_STICKERS.map(em=>`<button class="stickeropt${(decor.stickers||[]).includes(em)?' on':''}" onclick="toggleSticker('${em}')">${em}</button>`).join('');
   return `<div class="screen"><div class="topbar purple"><button class="backbtn" onclick="goTop()">◀ トップ Top</button><p class="hello">デコる / Decorate</p><h1 class="title">じぶんの タクシー<span class="en">Make it yours</span></h1></div>
     <div class="scroll"><div class="decorprev">${carSVG(previewCar,{decor:true})}</div>
     <div class="sechead sm"><h2>かざり<span class="en">Accessory</span></h2></div><div class="decorgrid">${acc}</div>
     <div class="sechead sm"><h2>シール <small>(3こまで)</small><span class="en">Stickers · max 3</span></h2></div><div class="stickergrid">${stk}</div>
+    <button class="linkcard" onclick="goShop()"><span class="lci">🛒</span><span class="lct"><b>ショップ</b><span>コインで もっと かざりを かおう · Shop</span></span><span class="lcarr">▶</span></button>
     <div class="gobar"><button class="gobtn" onclick="goTop()">できた！ <span class="en">Done</span></button></div></div></div>`;
 }
 
@@ -333,9 +357,109 @@ function myPageScreen(){
       <button class="linkcard" onclick="goGarage()"><span class="lci">🚗</span><span class="lct"><b>くるまずかん</b><span>${CARS.filter(c=>PROFILE.seenCars[c.id]).length} / ${CARS.length} あつめた · Garage</span></span><span class="lcarr">▶</span></button>
       <button class="linkcard" onclick="goDriverDex()"><span class="lci">🧑</span><span class="lct"><b>ドライバーずかん</b><span>${driversMet} / ${allDrivers().length} あった · Drivers</span></span><span class="lcarr">▶</span></button>
       <button class="linkcard" onclick="goMissions()"><span class="lci">🎯</span><span class="lct"><b>ミッション</b><span>${MISSIONS.filter(missionDone).length} / ${MISSIONS.length} クリア · Missions</span></span><span class="lcarr">▶</span></button>
+      <button class="linkcard" onclick="goAchievements()"><span class="lci">🏅</span><span class="lct"><b>トロフィー</b><span>${ACHIEVEMENTS.filter(achievementDone).length} / ${ACHIEVEMENTS.length} · Achievements</span></span><span class="lcarr">▶</span></button>
+      <button class="linkcard" onclick="goShop()"><span class="lci">🛒</span><span class="lct"><b>ショップ</b><span>🪙 ${p.coins||0} · Shop</span></span><span class="lcarr">▶</span></button>
       <button class="linkcard" onclick="goDecorate()"><span class="lci">🎨</span><span class="lct"><b>デコる</b><span>タクシーを かざろう · Decorate</span></span><span class="lcarr">▶</span></button>
       <div class="sechead"><h2>スタンプカード<span class="en">Place stamps</span></h2></div>
       <div class="stampcard">${stamps}</div>
       <div class="gobar"><button class="gobtn" onclick="goPlaces()">🚕 タクシーにのる<span class="en">Ride now</span></button></div>
     </div></div></div>`;
+}
+
+function coinsPill(){ return `<div class="coinspill">🪙 <b>${PROFILE.coins||0}</b></div>`; }
+
+/* ---- SHOP / コインで かおう ---- */
+function shopScreen(){
+  const cards=SHOP.map(it=>{
+    const bought=owns(it.id), afford=PROFILE.coins>=it.cost;
+    const btn=bought ? `<span class="owned">✓ もってる</span>`
+      : `<button class="buybtn${afford?'':' no'}" ${afford?`onclick="buy('${it.id}')"`:'disabled'}>🪙 ${it.cost}</button>`;
+    return `<div class="shopcard${bought?' bought':''}"><div class="shopemoji">${it.emoji}</div><b>${it.jp}</b>${btn}</div>`;
+  }).join('');
+  return `<div class="screen"><div class="topbar purple"><button class="backbtn" onclick="goTop()">◀ トップ Top</button>${coinsPill()}<h1 class="title">ショップ<span class="en">Spend your coins</span></h1></div>
+    <div class="scroll"><p class="maphint">コインは のると たまるよ！ earn coins by riding &amp; missions</p>
+    <div class="shopgrid">${cards}</div>
+    <div class="gobar"><button class="gobtn" onclick="goPlaces()">🚕 タクシーにのる<span class="en">Ride now</span></button></div></div></div>`;
+}
+
+/* ---- ACHIEVEMENTS / トロフィー ---- */
+function achievementsScreen(){
+  const got=ACHIEVEMENTS.filter(achievementDone).length;
+  const cells=ACHIEVEMENTS.map(a=>{ const done=achievementDone(a);
+    return `<div class="acell${done?' got':''}"><div class="aic">${done?a.icon:'🔒'}</div><div class="agn"><b>${a.jp}</b><span>${a.en}</span></div>${done?'<span class="gcheck">✓</span>':''}</div>`;
+  }).join('');
+  return `<div class="screen"><div class="topbar purple"><button class="backbtn" onclick="goTop()">◀ トップ Top</button><p class="hello">トロフィー / Achievements</p><h1 class="title">あつめた トロフィー<span class="en">${got} / ${ACHIEVEMENTS.length}</span></h1></div>
+    <div class="scroll"><div class="achlist">${cells}</div>
+    <div class="gobar"><button class="gobtn" onclick="goPlaces()">🚕 タクシーにのる<span class="en">Ride now</span></button></div></div></div>`;
+}
+
+/* ---- SETTINGS (parent) ---- */
+function settingsScreen(){
+  const p=PROFILE;
+  const music=MUSIC.map(m=>`<button class="worldchip${p.music===m.id?' on':''}" onclick="setMusic('${m.id}')"><span class="we">${m.emoji}</span><span>${m.jp}</span></button>`).join('');
+  return `<div class="screen"><div class="topbar blue"><button class="backbtn" onclick="goTop()">◀ トップ Top</button><p class="hello">せってい / Settings</p><h1 class="title">おうちの ひと むけ<span class="en">Settings</span></h1></div>
+    <div class="scroll"><div class="settings">
+      <div class="setrow"><label>なまえ / Name</label><input id="setName" value="${p.name}" oninput="setName(this.value)"></div>
+      <div class="setrow"><label>ローマじ / En</label><input id="setNameEn" value="${p.nameEn}" oninput="setNameEn(this.value)"></div>
+      <div class="setrow"><label>とし / Age</label><input id="setAge" type="number" min="1" max="12" value="${p.age}" oninput="setAge(this.value)"></div>
+      <div class="setrow"><label>🔊 よみあげ / Read aloud</label><button class="toggle${p.readAloud?' on':''}" onclick="toggleReadAloud(this)">${p.readAloud?'ON':'OFF'}</button></div>
+      <div class="sechead sm"><h2>おんがく<span class="en">Music</span></h2></div><div class="worldrow">${music}</div>
+      <div class="setrow danger"><label>データを けす / Reset</label><button class="resetbtn" onclick="doReset()">リセット</button></div>
+    </div></div></div>`;
+}
+
+/* ---- GAMES hub / ミニゲーム ---- */
+function gamesScreen(){
+  const games=[
+    {fn:'goDriverMode', emoji:'🎓', jp:'うんてんしゅモード', en:'Be the driver'},
+    {fn:'goFreeDrive',  emoji:'🕹️', jp:'フリードライブ',     en:'Free drive'},
+    {fn:'goCarWash',    emoji:'🫧', jp:'せんしゃ',           en:'Car wash'},
+    {fn:'goColorGame',  emoji:'🎨', jp:'いろあそび',         en:'Colors'},
+  ].map(g=>`<button class="gamecard" onclick="${g.fn}()"><span class="gce">${g.emoji}</span><b>${g.jp}</b><span>${g.en}</span></button>`).join('');
+  return `<div class="screen"><div class="topbar green"><button class="backbtn" onclick="goTop()">◀ トップ Top</button>${coinsPill()}<h1 class="title">ミニゲーム<span class="en">Mini games</span></h1></div>
+    <div class="scroll"><div class="gamesgrid">${games}</div></div></div>`;
+}
+
+/* ---- DRIVER MODE (Haru is the driver) ---- */
+function driverModeScreen(){
+  const reqs=state.requests||[];
+  const cards=reqs.map((r,i)=>`<button class="reqcard" onclick="acceptRide(${i})"><div class="reqp" style="--df:#eef3fa">${r.passenger}</div>
+    <div class="reqmeta"><b>${r.pjp}</b><span>${r.demoji} ${r.djp} へ いきたい</span></div><span class="reqgo">のせる ▶</span></button>`).join('');
+  return `<div class="screen"><div class="topbar purple"><button class="backbtn" onclick="goGames()">◀ もどる</button><p class="hello">🎓 うんてんしゅモード</p><h1 class="title">おきゃくさんを のせよう<span class="en">Pick a passenger</span></h1></div>
+    <div class="scroll"><p class="maphint">タップして おきゃくさんを のせてね</p><div class="reqlist">${cards}</div></div></div>`;
+}
+function driverDoneScreen(){
+  return `<div class="screen"><div class="topbar green"><p class="hello">🎓 うんてんしゅモード</p><h1 class="title">とうちゃく！<span class="en">Dropped off!</span></h1></div>
+    <div class="scroll"><div class="done">${confettiHTML()}
+      <div class="thanksstage">${state.passenger||'🧑'}</div>
+      <h2 class="bigmsg">ありがとう！ じょうずだね！<span class="en">Great driving!</span></h2>
+      <div class="coinline">🪙 コイン ゲット！ <b>+${state.driveReward||50}</b></div>
+      <div class="gobar" style="width:100%;max-width:340px"><button class="gobtn" onclick="goDriverMode()">つぎの おきゃくさん ↺<span class="en">Next passenger</span></button></div>
+      <div class="menurow" style="width:100%;max-width:340px"><button class="menubtn" onclick="goGames()"><span class="mpi">🎮</span><b>ミニゲーム</b><span>Games</span></button><button class="menubtn" onclick="goTop()"><span class="mpi">🏠</span><b>トップ</b><span>Home</span></button></div>
+    </div></div></div>`;
+}
+
+/* ---- FREE DRIVE (steer & collect coins) ---- */
+function freeDriveScreen(){
+  return `<div class="screen"><div class="topbar green"><button class="backbtn" onclick="goGames()">◀ やめる</button><p class="hello">🕹️ フリードライブ</p><h1 class="title">コインを あつめよう！<span class="en">Drag to steer</span></h1></div>
+    <div class="scroll"><div class="fdhud"><span>🪙 <b id="fdscore">0</b></span><span>⏱️ <b id="fdtime">20</b></span></div>
+    <div class="fdstage" id="fdstage"><div class="fdlane"></div><div class="fdcar" id="fdcar">${carSVG(favoriteCar()?favoriteCar().id:'taxi')}</div></div>
+    <p class="maphint">くるまを うごかして コインを とってね！ / drag the car left & right</p></div></div>`;
+}
+
+/* ---- CAR WASH (scrub the car clean) ---- */
+function carWashScreen(){
+  const spots=[]; for(let i=0;i<8;i++){ spots.push(`<span class="dirt" data-i="${i}" style="left:${18+Math.random()*64}%;top:${30+Math.random()*45}%"></span>`); }
+  return `<div class="screen"><div class="topbar blue"><button class="backbtn" onclick="goGames()">◀ もどる</button><p class="hello">🫧 せんしゃ</p><h1 class="title">くるまを ピカピカに！<span class="en">Scrub it clean</span></h1></div>
+    <div class="scroll"><div class="washstage" id="washstage"><div class="washcar">${carSVG(favoriteCar()?favoriteCar().id:'taxi')}</div>${spots.join('')}
+      <div class="washdone" id="washdone">✨ ピカピカ！ ✨</div></div>
+    <p class="maphint">よごれを こすって おとしてね！ / rub the dirt away</p></div></div>`;
+}
+
+/* ---- COLOR GAME (tap the right colour) ---- */
+function colorGameScreen(){
+  const g=state.colorGame||{};
+  const cars=(g.choices||[]).map((c,i)=>`<button class="colorcar" onclick="colorPick(${i})">${coloredCarSVG(c.body)}</button>`).join('');
+  return `<div class="screen"><div class="topbar green"><button class="backbtn" onclick="goGames()">◀ やめる</button><p class="hello">🎨 いろあそび · ${g.round||1}/5</p><h1 class="title"><span style="color:${g.hex||'#333'}">${g.jp||''}</span> の くるまは？<span class="en">Tap the ${g.en||''} car</span></h1></div>
+    <div class="scroll"><div class="colorgrid" id="colorgrid">${cars}</div><p class="maphint" id="colormsg">タップしてね！</p></div></div>`;
 }

@@ -26,8 +26,13 @@ const DESTS = [
   { id:'inter',      jp:'インター',      en:'Intl School', emoji:'🌍', dc:'#e2f0ff', dsh:'#cbe0f5', pos:{x:214,y:58},  scene:'school',    km:7 },
   { id:'yochien',    jp:'こまばようちえん', en:'Kindergarten', emoji:'🧸', dc:'#fff0f6', dsh:'#f2d6e6', pos:{x:40,y:150}, scene:'kinder',  km:3 },
   { id:'singapore',  jp:'シンガポール',  en:'Singapore',  emoji:'🦁', dc:'#e6fff6', dsh:'#c9f0e2', pos:{x:332,y:70},  scene:'singapore', km:5000 },
+  { id:'zoo',        jp:'どうぶつえん',  en:'Zoo',        emoji:'🦒', dc:'#eafbe0', dsh:'#d3f0c2', pos:{x:132,y:120}, scene:'zoo',       km:9 },
+  { id:'aquarium',   jp:'すいぞくかん',  en:'Aquarium',   emoji:'🐠', dc:'#e0f4ff', dsh:'#c2e6f7', pos:{x:238,y:110}, scene:'aquarium',  km:11 },
+  { id:'airport',    jp:'くうこう',      en:'Airport',    emoji:'✈️', dc:'#eef1f6', dsh:'#d7dde6', pos:{x:250,y:168}, scene:'airport',   km:20 },
+  { id:'grandma',    jp:'おばあちゃんち', en:"Grandma's",  emoji:'👵', dc:'#fff0e6', dsh:'#f2d9c4', pos:{x:150,y:170}, scene:'houses',    km:16 },
+  { id:'space',      jp:'うちゅうステーション', en:'Space Stn', emoji:'🛰️', dc:'#ece2ff', dsh:'#d6c8f2', pos:{x:70,y:56}, scene:'space',   km:99999 },
 ];
-const PINCOLOR = { shibuya:'#ff4b3e', daikanyama:'#4fc06a', komaba:'#ffab2e', fujisawa:'#3d8bff', kakio:'#ff7a45', chiba:'#9b6bff', kohei:'#ff8a3d', inter:'#2f9bff', yochien:'#ff5fa2', singapore:'#12b886' };
+const PINCOLOR = { shibuya:'#ff4b3e', daikanyama:'#4fc06a', komaba:'#ffab2e', fujisawa:'#3d8bff', kakio:'#ff7a45', chiba:'#9b6bff', kohei:'#ff8a3d', inter:'#2f9bff', yochien:'#ff5fa2', singapore:'#12b886', zoo:'#6fb536', aquarium:'#2aa6d8', airport:'#7a8aa0', grandma:'#ff9a6b', space:'#8b6bff' };
 
 /* The fleet. `art` tells art.js how to draw each one. Add more here anytime.
    mult = price multiplier vs baseFare · wait = pickup minutes · tier = label shown in the ride list
@@ -49,6 +54,12 @@ const CARS = [
   { id:'volvo',     jp:'ボルボ',           en:'Volvo',       art:{kind:'sedan', body:'#2e4c6d', emblem:'#c9d4e2'},     mult:1.9, wait:6, tier:'あんぜん'  },
   { id:'toyota',    jp:'トヨタ',           en:'Toyota',      art:{kind:'sedan', body:'#0aa5b5', emblem:'#eafcff'},     mult:1.3, wait:4, tier:'ファミリー' },
   { id:'priusalpha', jp:'プリウスα',       en:'Prius Alpha', art:{kind:'van', body:'#8ec3a8'},                         mult:1.6, wait:5, tier:'ハイブリッド' },
+  { id:'bus',       jp:'バス',             en:'Bus',         art:{kind:'bus', body:'#31a3d8'},                         mult:1.4, wait:6, tier:'みんなで'  },
+  { id:'train',     jp:'でんしゃ',         en:'Train',       art:{kind:'train', body:'#3aae5a'},                       mult:1.5, wait:5, tier:'せんろ'    },
+  { id:'shinkansen', jp:'しんかんせん',    en:'Shinkansen',  art:{kind:'shinkansen', body:'#eef2f6'},                  mult:2.4, wait:3, tier:'こうそく'  },
+  { id:'firetruck', jp:'しょうぼうしゃ',   en:'Fire Truck',  art:{kind:'firetruck'}, sound:'siren',                    mult:0,   wait:2, tier:'とくべつ'  },
+  { id:'dump',      jp:'ダンプカー',       en:'Dump Truck',  art:{kind:'dump', body:'#ffb020'},                        mult:1.7, wait:6, tier:'はたらく'  },
+  { id:'goldtaxi',  jp:'ゴールドタクシー', en:'Gold Taxi',   art:{kind:'taxi', body:'#ffd24d', emblem:'#b8860b'}, shopCost:300, mult:3.5, wait:2, tier:'デラックス' },
   { id:'police',    jp:'パトカー',         en:'Police Car',  art:{kind:'police'},    sound:'siren',                    mult:0,   wait:2, tier:'とくべつ'  },
   { id:'ambulance', jp:'きゅうきゅうしゃ', en:'Ambulance',   art:{kind:'ambulance'}, sound:'siren',                    mult:0,   wait:2, tier:'とくべつ'  },
   { id:'uchusen',   jp:'うちゅうせん',     en:'Spaceship',   art:{kind:'spaceship'}, locked:true, unlockRides:5,       mult:3.0, wait:1, tier:'ひみつ'    },
@@ -57,8 +68,12 @@ const CARS = [
 /* Estimated fare shown in the ride list (rounded to a friendly ¥50). Free rides read ¥0. */
 function estFare(car){ return car.mult ? Math.round(CONFIG.baseFare * car.mult / 50) * 50 : 0; }
 
-/* Is a car available to pick yet? (locked cars unlock after N rides) */
-function carUnlocked(car){ return !car.locked || PROFILE.rides >= (car.unlockRides||0); }
+/* Is a car available to pick yet? (bought in shop, or ride-unlocked) */
+function carUnlocked(car){
+  if(PROFILE.owned && PROFILE.owned['car:'+car.id]) return true;   // bought in the shop
+  if(car.shopCost) return false;                                   // shop-only, not yet bought
+  return !car.locked || PROFILE.rides >= (car.unlockRides||0);
+}
 
 /* Payment methods shown on the checkout screen */
 const PAYMENTS = [
@@ -150,8 +165,15 @@ const PETS = [
   { id:'penguin', jp:'ペンギン',   en:'Penguin', emoji:'🐧' },
   { id:'dino',    jp:'きょうりゅう', en:'Dino',   emoji:'🦖' },
   { id:'unicorn', jp:'ユニコーン', en:'Unicorn', emoji:'🦄' },
+  { id:'lion',    jp:'ライオン',   en:'Lion',    emoji:'🦁', premium:true },
+  { id:'tiger',   jp:'トラ',       en:'Tiger',   emoji:'🐯', premium:true },
+  { id:'dragon',  jp:'ドラゴン',   en:'Dragon',  emoji:'🐉', premium:true },
 ];
 function petById(id){ return PETS.find(p=>p.id===id); }
+/* premium items must be bought in the shop before they show up */
+function owns(key){ return !!(PROFILE.owned && PROFILE.owned[key]); }
+function availablePets(){ return PETS.filter(p=>!p.premium || owns('pet:'+p.id)); }
+function availableAccessories(){ return DECOR_ACCESSORIES.filter(a=>!a.premium || owns('acc:'+a.id)); }
 
 /* ---- taxi decorations ---- */
 const DECOR_ACCESSORIES = [
@@ -163,6 +185,9 @@ const DECOR_ACCESSORIES = [
   { id:'flower',  jp:'おはな',     en:'Flower',  emoji:'🌸' },
   { id:'ribbon',  jp:'リボン',     en:'Ribbon',  emoji:'🎀' },
   { id:'sparkle', jp:'ぴかぴか',   en:'Sparkle', emoji:'✨' },
+  { id:'rainbow', jp:'にじ',       en:'Rainbow', emoji:'🌈', premium:true },
+  { id:'wings',   jp:'つばさ',     en:'Wings',   emoji:'🪽', premium:true },
+  { id:'fire',    jp:'ファイヤー', en:'Fire',    emoji:'🔥', premium:true },
 ];
 const DECOR_STICKERS = ['❤️','⭐','🌈','🌼','🔥','⚡','🎵','😄','🐾','⚽','🏁','💖'];
 const DECOR_MAX_STICKERS = 3;
@@ -210,31 +235,107 @@ function updateStreak(){
   PROFILE.streak=s; return s;
 }
 
+/* ---- coin shop (spend coins earned from rides & missions) ---- */
+const SHOP = [
+  { id:'car:goldtaxi', kind:'car', ref:'goldtaxi', jp:'ゴールドタクシー', emoji:'🚕', cost:300 },
+  { id:'car:uchusen',  kind:'car', ref:'uchusen',  jp:'うちゅうせん',     emoji:'🛸', cost:250 },
+  { id:'acc:rainbow',  kind:'acc', ref:'rainbow',  jp:'にじの かざり',   emoji:'🌈', cost:80  },
+  { id:'acc:wings',    kind:'acc', ref:'wings',    jp:'つばさ',           emoji:'🪽', cost:120 },
+  { id:'acc:fire',     kind:'acc', ref:'fire',     jp:'ファイヤー',       emoji:'🔥', cost:100 },
+  { id:'pet:lion',     kind:'pet', ref:'lion',     jp:'ライオン',         emoji:'🦁', cost:90  },
+  { id:'pet:tiger',    kind:'pet', ref:'tiger',    jp:'トラ',             emoji:'🐯', cost:90  },
+  { id:'pet:dragon',   kind:'pet', ref:'dragon',   jp:'ドラゴン',         emoji:'🐉', cost:150 },
+];
+function canBuy(item){ return !owns(item.id) && PROFILE.coins>=item.cost; }
+function buyItem(item){
+  if(owns(item.id) || PROFILE.coins<item.cost) return false;
+  PROFILE.coins-=item.cost; PROFILE.owned=PROFILE.owned||{}; PROFILE.owned[item.id]=true; saveProfile(); return true;
+}
+
+/* ---- in-car music (melodies live in sound.js, keyed by id) ---- */
+const MUSIC = [
+  { id:'none',    jp:'なし',       emoji:'🔇' },
+  { id:'happy',   jp:'ハッピー',   emoji:'🎵' },
+  { id:'drive',   jp:'ドライブ',   emoji:'🎶' },
+  { id:'lullaby', jp:'ゆったり',   emoji:'🌙' },
+];
+
+/* ---- engine / vehicle sound chosen per car (played in sound.js) ---- */
+function engineSound(car){
+  if(!car) return 'engine';
+  const k=car.art&&car.art.kind;
+  if(car.id==='uchusen') return 'warp';
+  if(car.sound==='siren') return 'siren';
+  if(k==='sport') return 'vroom';
+  if(k==='shinkansen') return 'whoosh';
+  if(k==='train') return 'traintoot';
+  if(k==='bus') return 'bushorn';
+  if(k==='robotaxi') return 'robo';
+  return 'engine';
+}
+
+/* ---- achievements (badge wall) ---- */
+const ACHIEVEMENTS = [
+  { id:'first',     icon:'🚕', jp:'はじめての ドライブ', en:'First ride',      cond:()=>PROFILE.rides>=1 },
+  { id:'rides5',    icon:'⭐', jp:'5かい のった',        en:'5 rides',         cond:()=>PROFILE.rides>=5 },
+  { id:'rides20',   icon:'👑', jp:'20かい のった',       en:'20 rides',        cond:()=>PROFILE.rides>=20 },
+  { id:'cars10',    icon:'🚗', jp:'くるま 10だい',       en:'10 cars',         cond:()=>Object.keys(PROFILE.seenCars).length>=10 },
+  { id:'carsall',   icon:'🏆', jp:'くるま ぜんぶ',       en:'All cars',        cond:()=>Object.keys(PROFILE.seenCars).length>=CARS.length },
+  { id:'placesall', icon:'🗺️', jp:'ばしょ ぜんぶ',       en:'All places',      cond:()=>Object.keys(PROFILE.places).length>=DESTS.length },
+  { id:'drivers10', icon:'🧑', jp:'ドライバー 10にん',   en:'10 drivers',      cond:()=>Object.keys(PROFILE.seenDrivers).length>=10 },
+  { id:'coins500',  icon:'🪙', jp:'コイン 500 ためた',   en:'500 coins',       cond:()=>(PROFILE.coinsEver||0)>=500 },
+  { id:'streak7',   icon:'🔥', jp:'7にち れんぞく',      en:'7-day streak',    cond:()=>(PROFILE.streak&&PROFILE.streak.count>=7) },
+  { id:'space',     icon:'🛰️', jp:'うちゅうへ いった',   en:'To space',        cond:()=>!!PROFILE.places.space },
+  { id:'driver',    icon:'🎓', jp:'うんてんしゅに なった', en:'Became a driver', cond:()=>(PROFILE.drives||0)>=1 },
+  { id:'wash',      icon:'🫧', jp:'せんしゃ した',        en:'Washed a car',    cond:()=>(PROFILE.washes||0)>=1 },
+];
+function achievementDone(a){ try{ return !!a.cond(); }catch(e){ return false; } }
+
+/* ---- passengers for driver mode (Haru is the driver) ---- */
+const PASSENGERS = [
+  { emoji:'🧑', jp:'おにいさん' }, { emoji:'👩', jp:'おねえさん' }, { emoji:'👦', jp:'おとこのこ' },
+  { emoji:'👧', jp:'おんなのこ' }, { emoji:'👴', jp:'おじいちゃん' }, { emoji:'🐱', jp:'ねこさん' },
+  { emoji:'🐶', jp:'いぬさん' }, { emoji:'🎅', jp:'サンタさん' }, { emoji:'👽', jp:'うちゅうじん' },
+];
+/* ---- friends you can pick up on the way ---- */
+const FRIENDS = [
+  { id:'none',  jp:'ひとりで', emoji:'🚫' },
+  { id:'kohei', jp:'こうへいくん', emoji:'👦' },
+  { id:'yuka',  jp:'ゆかちゃん',   emoji:'👧' },
+  { id:'baby',  jp:'あかちゃん',   emoji:'👶' },
+  { id:'mama',  jp:'ママ',         emoji:'👩' },
+];
+function friendById(id){ return FRIENDS.find(f=>f.id===id); }
+
 /* Player profile — accumulates during the session and (in Claude Code / a real
    project) is saved to localStorage so it survives a refresh. */
 const PROFILE_DEFAULT = () => ({
   name: CONFIG.name, nameEn: CONFIG.nameEn, age: CONFIG.age,
-  rides:0, points:0, coins:0,
+  rides:0, points:0, coins:0, coinsEver:0, drives:0, washes:0,
   places:{}, carCounts:{}, seenCars:{},
   seenDrivers:{}, driverCounts:{}, driverStars:{},
   decor:{ accessory:'none', stickers:[] }, world:'day', lastPet:'',
-  streak:{ count:0, last:null }, missionsDone:{}, snacksOrdered:0
+  streak:{ count:0, last:null }, missionsDone:{}, snacksOrdered:0,
+  owned:{}, music:'none', readAloud:true
 });
 const PROFILE = PROFILE_DEFAULT();
+/* add coins AND track lifetime total (for the coin achievement) */
+function earnCoins(n){ PROFILE.coins+=n; PROFILE.coinsEver=(PROFILE.coinsEver||0)+n; }
 
 /* ---- persistence (localStorage; silently no-ops where storage is blocked) ---- */
-const SAVE_KEYS = ['rides','points','coins','places','carCounts','seenCars','seenDrivers','driverCounts',
-  'driverStars','decor','world','lastPet','streak','missionsDone','snacksOrdered'];
+const SAVE_KEYS = ['name','nameEn','age','rides','points','coins','coinsEver','drives','washes',
+  'places','carCounts','seenCars','seenDrivers','driverCounts','driverStars','decor','world','lastPet',
+  'streak','missionsDone','snacksOrdered','owned','music','readAloud'];
 function loadProfile(){
   try{
     const raw = localStorage.getItem(CONFIG.storeKey);
     if(!raw) return;
     const saved = JSON.parse(raw);
     const def = PROFILE_DEFAULT();
-    SAVE_KEYS.forEach(k=>{ if(saved[k]!==undefined) PROFILE[k]=saved[k]; else PROFILE[k]=def[k]; });
+    SAVE_KEYS.forEach(k=>{ PROFILE[k] = (saved[k]!==undefined) ? saved[k] : def[k]; });
     if(!PROFILE.decor) PROFILE.decor={ accessory:'none', stickers:[] };
     if(!PROFILE.streak) PROFILE.streak={ count:0, last:null };
-    PROFILE.name=CONFIG.name; PROFILE.nameEn=CONFIG.nameEn; PROFILE.age=CONFIG.age;
+    if(!PROFILE.owned) PROFILE.owned={};
   }catch(e){ /* storage unavailable — run in-memory only */ }
 }
 function saveProfile(){

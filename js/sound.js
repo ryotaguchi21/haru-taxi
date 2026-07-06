@@ -26,6 +26,19 @@ const sfx = (()=>{
     g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
     o.connect(g).connect(c.destination); o.start(t); o.stop(t+dur+0.03);
   }
+  /* ---- looping background music (simple synthesised melodies) ---- */
+  const MELODIES = {
+    happy:   [[523,1],[659,1],[784,1],[659,1],[880,1],[784,2],[659,1],[523,2]],
+    drive:   [[392,1],[523,1],[659,1],[587,1],[523,1],[494,1],[523,2],[440,2]],
+    lullaby: [[659,2],[587,2],[523,2],[440,2],[494,2],[523,4]]
+  };
+  let musicTimer=null, musicId='none';
+  function playMelody(notes,i){
+    if(musicId==='none'||!notes) return;
+    const n=notes[i%notes.length]; if(!muted) tone(n[0],0,0.30*n[1],'triangle',0.05);
+    musicTimer=setTimeout(()=>playMelody(notes,i+1), 330*n[1]);
+  }
+
   return {
     ensure,
     toggle(){ muted=!muted; if(!muted){ ensure(); this.tap(); } return muted; },
@@ -38,6 +51,17 @@ const sfx = (()=>{
     warp(){ slide(220,1200,0,0.4,'sine',0.12); slide(1200,300,0.2,0.4,'triangle',0.08); }, // spaceship!
     ding(){ tone(1047,0,0.5,'sine',0.2); tone(1568,0,0.5,'sine',0.1); },
     pay(){ tone(1245,0,0.07,'square',0.15); tone(1661,0.09,0.1,'square',0.15); tone(2093,0.2,0.14,'sine',0.1); },
-    points(){ [523,659,784,1047,1319].forEach((f,i)=>tone(f,i*0.09,0.16,'triangle',0.18)); tone(2093,0.5,0.35,'sine',0.09); tone(2637,0.6,0.3,'sine',0.06); }
+    points(){ [523,659,784,1047,1319].forEach((f,i)=>tone(f,i*0.09,0.16,'triangle',0.18)); tone(2093,0.5,0.35,'sine',0.09); tone(2637,0.6,0.3,'sine',0.06); },
+    /* ---- engine / vehicle sounds ---- */
+    vroom(){ slide(120,620,0,0.35,'sawtooth',0.12); slide(620,260,0.32,0.3,'sawtooth',0.1); },
+    whoosh(){ slide(300,1500,0,0.5,'sine',0.09); slide(1500,600,0.42,0.4,'sine',0.05); },
+    traintoot(){ tone(392,0,0.4,'square',0.13); tone(311,0.18,0.42,'square',0.12); for(let i=0;i<3;i++) tone(110,0.5+i*0.18,0.12,'sawtooth',0.08); },
+    bushorn(){ tone(196,0,0.5,'sawtooth',0.14); tone(147,0.02,0.5,'sawtooth',0.1); },
+    robo(){ tone(660,0,0.08,'square',0.1); tone(880,0.1,0.08,'square',0.1); slide(400,900,0.2,0.3,'triangle',0.08); },
+    engine(){ slide(80,180,0,0.3,'sawtooth',0.1); tone(180,0.3,0.25,'sawtooth',0.06); },
+    play(name){ if(typeof this[name]==='function' && name!=='play'){ try{ this[name](); }catch(e){} } },
+    /* ---- background music control ---- */
+    startMusic(id){ this.stopMusic(); if(!id||id==='none'||!MELODIES[id]) return; ensure(); musicId=id; playMelody(MELODIES[id],0); },
+    stopMusic(){ musicId='none'; if(musicTimer){ clearTimeout(musicTimer); musicTimer=null; } }
   };
 })();

@@ -46,6 +46,13 @@ function carSVG(id, opts){
   if(opts.pet){ const p = petById(opts.pet); extra += petInner(p ? p.emoji : opts.pet); }
   return `<svg viewBox="0 0 220 150" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${carInner(id)}${extra}</svg>`;
 }
+/* a plain sedan in any body colour (used by the colour-learning game) */
+function coloredCarSVG(body){
+  let s=`<svg viewBox="0 0 220 150" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">`;
+  s+=`<ellipse cx="110" cy="142" rx="90" ry="9" fill="rgba(0,0,0,.10)"/><g class="body">`+wheels();
+  s+=lowerBody(body)+cabinSedan(body)+face(122,70)+smileCheeks(150,100)+`</g></svg>`;
+  return s;
+}
 /* decorations: an accessory on the roof + up to 3 stickers on the body */
 function decorInner(decor){
   if(!decor) return '';
@@ -116,6 +123,51 @@ function carInner(id){
       s+=`<rect x="14" y="100" width="192" height="9" fill="#ff4b3e"/>`;
       s+=`<g transform="translate(150,102)"><rect x="-4" y="-11" width="8" height="22" rx="2" fill="#ff3b30"/><rect x="-11" y="-4" width="22" height="8" rx="2" fill="#ff3b30"/></g>`;
       s+=`<rect x="100" y="24" width="22" height="11" rx="5" fill="#ff3b30"/>`+face(128,58,24)+smileCheeks(112,102); break;
+    }
+    case 'bus': {
+      const b=a.body||'#31a3d8';
+      s+=lowerBody(b);
+      s+=`<rect x="18" y="44" width="184" height="48" rx="14" fill="${b}"/>`;
+      s+=`<g fill="#bfe9ff">${[0,1,2,3].map(i=>`<rect x="${30+i*42}" y="52" width="32" height="24" rx="4"/>`).join('')}</g>`;
+      s+=`<rect x="18" y="96" width="188" height="6" fill="#ffd84d"/>`;
+      s+=`<rect x="188" y="60" width="8" height="12" rx="2" fill="#fff4c2"/>`;
+      s+=face(60,68,20)+smileCheeks(50,96); break;
+    }
+    case 'train': {
+      const b=a.body||'#3aae5a';
+      s+=lowerBody(b);
+      s+=`<rect x="22" y="40" width="176" height="52" rx="18" fill="${b}"/>`;
+      s+=`<rect x="150" y="28" width="32" height="14" rx="4" fill="${b}"/><line x1="166" y1="28" x2="166" y2="16" stroke="#9aa3b2" stroke-width="3"/><rect x="150" y="14" width="30" height="4" rx="2" fill="#9aa3b2"/>`;
+      s+=`<g fill="#bfe9ff">${[0,1,2].map(i=>`<rect x="${38+i*48}" y="50" width="36" height="26" rx="6"/>`).join('')}</g>`;
+      s+=`<rect x="22" y="96" width="176" height="7" fill="#ffd84d"/>`;
+      s+=face(170,70,18)+smileCheeks(56,98); break;
+    }
+    case 'shinkansen': {
+      const b=a.body||'#eef2f6';
+      s+=lowerBody(b,'#d7dde6');
+      s+=`<path d="M 18 92 Q 18 50 62 50 L 150 50 Q 206 56 206 84 Q 206 92 192 92 Z" fill="${b}" stroke="#d7dde6" stroke-width="2"/>`;
+      s+=`<path d="M 22 82 L 202 82 L 202 90 L 22 90 Z" fill="#2f6fd8"/>`;
+      s+=`<path d="M 152 55 Q 200 60 200 80 L 166 80 Z" fill="#bfe9ff"/>`;
+      s+=`<g fill="#bfe9ff">${[0,1,2].map(i=>`<rect x="${44+i*34}" y="58" width="24" height="15" rx="4"/>`).join('')}</g>`;
+      s+=face(74,70,17)+smileCheeks(46,94); break;
+    }
+    case 'firetruck': {
+      s+=lowerBody('#e8362b');
+      s+=cabinVan('#e8362b');
+      s+=`<rect x="26" y="62" width="96" height="16" rx="4" fill="#c02318"/>`;
+      s+=`<rect x="34" y="42" width="120" height="6" rx="3" fill="#c9cfd8" transform="rotate(-7 34 42)"/>`;
+      s+=`<rect x="92" y="24" width="24" height="11" rx="5" fill="#ff3b30"/>`;
+      s+=`<circle cx="150" cy="70" r="7" fill="#fff" stroke="#c9cfd8" stroke-width="2"/>`;
+      s+=face(128,58,24)+smileCheeks(60,102); break;
+    }
+    case 'dump': {
+      const b=a.body||'#ffb020';
+      s+=lowerBody('#4a4f57');
+      s+=`<path d="M 22 86 L 128 86 L 138 52 L 40 52 Z" fill="${b}" stroke="#d99400" stroke-width="2"/>`;
+      s+=`<rect x="44" y="58" width="82" height="22" fill="#c98a10" opacity=".45"/>`;
+      s+=`<path d="M 150 86 L 150 58 Q 150 52 158 52 L 178 52 L 196 76 L 196 86 Z" fill="${b}" stroke="#d99400" stroke-width="2"/>`;
+      s+=`<rect x="160" y="60" width="18" height="14" rx="3" fill="#bfe9ff"/>`;
+      s+=face(176,72,16)+smileCheeks(168,98); break;
     }
     default: { s+=lowerBody('#ffc531')+cabinSedan('#ffc531')+face(122,70)+smileCheeks(150,100); }
   }
@@ -284,9 +336,13 @@ function sceneSVG(type, world){
   world = world || { time:'day', weather:'none' };
   const base = { city:['#cfe0f5','#eaf2fb'], forest:['#bfe8ff','#e7f7ff'], school:['#cfeaff','#eef8ff'],
                 sea:['#8fd3f4','#d6f0ff'], houses:['#ffe6c7','#fff4e3'], park:['#d9c9ff','#f0e9ff'],
-                kinder:['#ffe0ef','#fff2f8'], singapore:['#ffd9a8','#ffeccb'] }[type] || ['#a9e2ff','#e7f7ff'];
+                kinder:['#ffe0ef','#fff2f8'], singapore:['#ffd9a8','#ffeccb'],
+                zoo:['#cdeeff','#eafaf0'], aquarium:['#1f6fa8','#5fb2d8'], airport:['#bcd9f2','#e6f2fb'],
+                space:['#0b1026','#26305a'] }[type] || ['#a9e2ff','#e7f7ff'];
+  const dark = (type==='space'), under = (type==='aquarium');
   let sky = base;
-  if(world.time==='sunset')      sky=['#ff9e6d','#ffd9a8'];
+  if(dark || under){ /* these scenes keep their own sky */ }
+  else if(world.time==='sunset')  sky=['#ff9e6d','#ffd9a8'];
   else if(world.time==='night')  sky=['#1e2a4d','#43537f'];
   else if(world.weather==='rain') sky=['#9fb0c4','#c7d3e0'];
   else if(world.weather==='snow') sky=['#ccd8e8','#eef4fb'];
@@ -294,8 +350,14 @@ function sceneSVG(type, world){
   let s = `<svg viewBox="0 0 360 230" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">`;
   s += `<defs><linearGradient id="${uid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${sky[0]}"/><stop offset="1" stop-color="${sky[1]}"/></linearGradient></defs>`;
   s += `<rect width="360" height="230" fill="url(#${uid})"/>`;
-  // sun / moon / clouds
-  if(world.time==='night'){
+  // sun / moon / clouds (skipped for space & underwater)
+  if(dark){
+    s += `<g fill="#fff">${[[40,30],[90,54],[150,26],[210,44],[264,30],[120,70],[300,60],[190,88],[52,96]].map(([x,y])=>`<circle cx="${x}" cy="${y}" r="${(x%3)?1.6:2.2}"/>`).join('')}</g>`;
+    s += `<circle cx="60" cy="46" r="16" fill="#c9a6ff"/><circle cx="60" cy="46" r="16" fill="none" stroke="#e0ccff" stroke-width="3" opacity=".5"/>`;
+    s += `<ellipse cx="300" cy="70" rx="26" ry="9" fill="none" stroke="#ffcf7a" stroke-width="3" opacity=".7" transform="rotate(-18 300 70)"/><circle cx="300" cy="70" r="14" fill="#ffb84d"/>`;
+  } else if(under){
+    s += `<g fill="#bfe8ff" opacity=".5">${[[60,40],[120,70],[210,50],[280,90],[160,110]].map(([x,y],i)=>`<circle cx="${x}" cy="${y}" r="${4+i}"/>`).join('')}</g>`;
+  } else if(world.time==='night'){
     s += `<circle cx="308" cy="40" r="22" fill="#fdf6d8"/><circle cx="298" cy="34" r="20" fill="${sky[0]}"/>`; // crescent moon
     s += `<g fill="#fff">${[[40,30],[90,54],[150,26],[210,44],[264,30],[120,70],[190,80]].map(([x,y])=>`<circle cx="${x}" cy="${y}" r="1.8"/>`).join('')}</g>`;
   } else if(world.weather==='rain' || world.weather==='snow'){
@@ -351,6 +413,33 @@ function sceneSVG(type, world){
     s += `<g fill="#bfe9ff" opacity=".8">${[0,1,2,3,4].map(i=>`<rect x="${126+i*4}" y="80" width="2" height="60"/>`).join('')}${[0,1,2,3,4].map(i=>`<rect x="${174+i*4}" y="72" width="2" height="70"/>`).join('')}</g>`;
     // palm tree
     s += `<g transform="translate(304,150)"><path d="M0 0 Q-4 -34 2 -50" stroke="#8a5a34" stroke-width="6" fill="none"/><g fill="#3fae5b"><path d="M2 -50 Q-24 -56 -34 -44 Q-14 -50 2 -46 Z"/><path d="M2 -50 Q28 -56 38 -44 Q18 -50 2 -46 Z"/><path d="M2 -50 Q-10 -74 -26 -78 Q-8 -66 2 -48 Z"/><path d="M2 -50 Q14 -74 30 -78 Q12 -66 2 -48 Z"/></g></g>`;
+  } else if(type==='zoo'){
+    s += `<path d="M0 150 Q90 132 180 150 T360 148 V230 H0 Z" fill="#bfe6a8"/>`;
+    // giraffe
+    s += `<g transform="translate(96,150)"><rect x="-6" y="-70" width="14" height="64" rx="6" fill="#f0c36a"/><ellipse cx="1" cy="-78" rx="12" ry="10" fill="#f0c36a"/><circle cx="-3" cy="-80" r="1.6" fill="#333"/><g fill="#c98a3a"><circle cx="-2" cy="-56" r="4"/><circle cx="4" cy="-40" r="4"/><circle cx="-3" cy="-26" r="4"/></g><rect x="-14" y="-8" width="28" height="10" fill="#f0c36a"/></g>`;
+    // elephant
+    s += `<g transform="translate(250,150)"><ellipse cx="0" cy="-24" rx="34" ry="24" fill="#9aa7b5"/><circle cx="26" cy="-30" r="16" fill="#9aa7b5"/><path d="M40 -28 Q50 -18 44 -4" stroke="#9aa7b5" stroke-width="7" fill="none" stroke-linecap="round"/><circle cx="30" cy="-34" r="2" fill="#333"/><rect x="-22" y="-4" width="8" height="10" fill="#8593a2"/><rect x="10" y="-4" width="8" height="10" fill="#8593a2"/></g>`;
+    // fence
+    s += `<g stroke="#b5854a" stroke-width="4">${[10,40,70,290,320,350].map(x=>`<line x1="${x}" y1="150" x2="${x}" y2="132"/>`).join('')}</g>`;
+  } else if(type==='aquarium'){
+    // big glass tank feel: fish, seaweed, sandy floor
+    s += `<path d="M0 196 Q90 184 180 196 T360 194 V230 H0 Z" fill="#f0e0b0"/>`;
+    s += `<g fill="#2f8f5a">${[60,150,250,320].map(x=>`<path d="M${x} 196 Q${x-8} 160 ${x} 130 Q${x+8} 160 ${x} 196 Z"/>`).join('')}</g>`;
+    s += `<g>${[['#ff8a3d',80,70],['#ffd166',210,58],['#ff6b9d',150,110],['#4fd0e0',290,96],['#ff6b6b',120,150]].map(([c,x,y])=>`<g transform="translate(${x},${y})"><ellipse cx="0" cy="0" rx="14" ry="9" fill="${c}"/><path d="M12 0 L22 -7 L22 7 Z" fill="${c}"/><circle cx="-6" cy="-2" r="1.8" fill="#fff"/></g>`).join('')}</g>`;
+    s += `<g fill="#bfe8ff" opacity=".55">${[[100,40],[190,30],[260,60],[60,110]].map(([x,y])=>`<circle cx="${x}" cy="${y}" r="3"/>`).join('')}</g>`;
+  } else if(type==='airport'){
+    s += `<rect y="150" width="360" height="80" fill="#8f99a8"/>`;
+    s += `<rect y="176" width="360" height="10" fill="#c9cfd8"/><g fill="#ffd84d">${[20,80,140,200,260,320].map(x=>`<rect x="${x}" y="179" width="24" height="4"/>`).join('')}</g>`;
+    // control tower
+    s += `<g transform="translate(60,150)"><rect x="-8" y="-70" width="16" height="70" fill="#dfe6ee"/><rect x="-18" y="-88" width="36" height="22" rx="5" fill="#aeb8c6"/><rect x="-14" y="-84" width="28" height="12" rx="3" fill="#bfe9ff"/></g>`;
+    // airplane
+    s += `<g transform="translate(230,90)"><ellipse cx="0" cy="0" rx="52" ry="14" fill="#eef2f6" stroke="#d7dde6" stroke-width="2"/><path d="M-10 0 L-40 -22 L-24 -2 Z" fill="#cfd7e2"/><path d="M40 0 L58 -10 L58 8 Z" fill="#cfd7e2"/><g fill="#bfe9ff">${[0,1,2,3].map(i=>`<circle cx="${-24+i*14}" cy="-2" r="3"/>`).join('')}</g><path d="M20 6 L34 22 L40 6 Z" fill="#cfd7e2"/></g>`;
+  } else if(type==='space'){
+    // planets + space station
+    s += `<circle cx="70" cy="150" r="60" fill="#5a6bd8"/><ellipse cx="70" cy="150" rx="60" ry="14" fill="none" stroke="#9fb0ff" stroke-width="3" opacity=".5"/>`;
+    s += `<circle cx="300" cy="60" r="20" fill="#ff9e6d"/><ellipse cx="300" cy="60" rx="34" ry="9" fill="none" stroke="#ffd1a8" stroke-width="3" transform="rotate(-20 300 60)"/>`;
+    // station
+    s += `<g transform="translate(200,110)"><rect x="-30" y="-8" width="60" height="16" rx="8" fill="#c7d0dc"/><rect x="-6" y="-22" width="12" height="44" rx="4" fill="#aeb8c6"/><rect x="-52" y="-4" width="20" height="8" fill="#3d8bff"/><rect x="32" y="-4" width="20" height="8" fill="#3d8bff"/><circle cx="0" cy="0" r="5" fill="#7cf3ff"/></g>`;
   }
   // time-of-day tint over the whole scene (cheap way to unify the mood)
   if(world.time==='night')       s += `<rect width="360" height="230" fill="#1a2340" opacity=".34"/>`;
