@@ -3,7 +3,9 @@
    (no audio files, so the whole app stays self-contained)
    ============================================================ */
 const sfx = (()=>{
+  const MUTE_KEY='haruTaxi.v7.muted';   // remembered across launches (a parent's mute sticks)
   let ctx=null, muted=false;
+  try{ muted = localStorage.getItem(MUTE_KEY)==='1'; }catch(e){}
   function ensure(){
     if(!ctx){ try{ ctx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
     if(ctx && ctx.state==='suspended') ctx.resume();
@@ -41,7 +43,7 @@ const sfx = (()=>{
 
   return {
     ensure,
-    toggle(){ muted=!muted; if(!muted){ ensure(); this.tap(); } return muted; },
+    toggle(){ muted=!muted; try{ localStorage.setItem(MUTE_KEY, muted?'1':'0'); }catch(e){} if(!muted){ ensure(); this.tap(); } return muted; },
     isMuted(){ return muted; },
     tap(){ tone(520,0,0.09,'triangle',0.16); },
     select(){ tone(523,0,0.1,'triangle',0.2); tone(784,0.08,0.12,'triangle',0.2); },

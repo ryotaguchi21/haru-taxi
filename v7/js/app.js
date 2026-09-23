@@ -7,11 +7,16 @@ const RIDE_MS = CONFIG.rideMs;
 const state = { screen:'top', dest:null, car:null, driver:null, pet:'', friend:'none', fare:CONFIG.baseFare, pay:null,
                 points:0, order:{}, paidTotal:0, justUnlocked:false, rating:5, compliments:[], newMissions:[],
                 mode:'rider', passenger:'', requests:[], driveReward:0, colorGame:null };
-let ride=null, navTimer=null, etaTimer=null, gameTimer=null;
+let ride=null, navTimer=null, etaTimer=null, gameTimer=null, cdTimer=null;
 function clearRide(){ if(ride){ clearInterval(ride); ride=null; } }
 function clearNav(){ if(navTimer){ clearTimeout(navTimer); navTimer=null; } }
 function clearEta(){ if(etaTimer){ clearInterval(etaTimer); etaTimer=null; } }
-function clearGame(){ if(gameTimer){ clearInterval(gameTimer); gameTimer=null; } }
+function clearGame(){ if(gameTimer){ clearInterval(gameTimer); gameTimer=null; } if(cdTimer){ clearInterval(cdTimer); cdTimer=null; } }
+
+/* navToken bumps on every render; later() drops a delayed action if the screen changed in the
+   meantime — stops stale "back to the games menu" jumps and double round-advances */
+let navToken=0;
+function later(ms, fn){ const tk=navToken; return setTimeout(()=>{ if(tk===navToken) fn(); }, ms); }
 
 const SCREENS = {
   top:topScreen, home:homeScreen, cars:carsScreen, searching:searchingScreen, found:foundScreen,
@@ -39,6 +44,7 @@ function speak(text){
 
 let lastScreen=null;
 function render(){
+  navToken++;
   clearRide(); clearNav(); clearEta(); clearGame();
   if(state.screen!=='riding') sfx.stopMusic();
   const v=document.getElementById('view');
@@ -46,13 +52,16 @@ function render(){
   const prevSc=v.querySelector('.scroll'), keep=(state.screen===lastScreen && prevSc);
   const savedTop=keep?prevSc.scrollTop:0;
   v.innerHTML=(SCREENS[state.screen]||topScreen)();
+  const changed=(state.screen!==lastScreen);
   lastScreen=state.screen;
   const sc=v.querySelector('.scroll'); if(sc) sc.scrollTop = keep?savedTop:0;
+  // a new screen always starts at the top (belt-and-braces for any page-level scroll)
+  if(changed){ try{ window.scrollTo(0,0); }catch(e){} }
   if(state.screen==='cars')      setTimeout(initSlider,60);
   if(state.screen==='searching'){ sfx.go(); navTimer=setTimeout(goFound,2300); }
   if(state.screen==='found'){ setTimeout(()=>{ sfx.points(); const dv=state.driver||{}; speak('こんにちは！'+(dv.jp||'')+'です'); },140); }
   if(state.screen==='coming')     setTimeout(startComingEta,90);
-  if(state.screen==='riding'){ setTimeout(startRide,60); sfx.startMusic(PROFILE.music); }
+  if(state.screen==='riding'){ state.arrived=false; setTimeout(startRide,60); sfx.startMusic(PROFILE.music); }
   if(state.screen==='done')       setTimeout(()=>sfx.points(),120);
   if(state.screen==='driverdone') setTimeout(()=>sfx.points(),120);
   if(state.screen==='freedrive')  setTimeout(startFreeDrive,80);
@@ -61,9 +70,14 @@ function render(){
 
 /* meter + progress + live-map navigation + ticking ETA while riding */
 function startRide(){
-  state.fare=CONFIG.baseFare;
-  const bar=document.getElementById('progbar'); if(bar) requestAnimationFrame(()=>{ bar.style.width='100%'; });
-  const m0=document.getElementById('meter'); if(m0) m0.textContent='¥'+CONFIG.baseFare;
+  // the meter now ends exactly on the fare the car picker promised (estFare), and the
+  // emergency vehicles marked むりょう really are free
+  const car=CARS.find(x=>x.id===state.car)||{mult:1};
+  const free=!car.mult, base=free?0:CONFIG.baseFare, target=free?0:Math.max(base, estFare(car));
+  state.fare=base; state.arrived=false;
+  const bar=document.getElementById('progbar');
+  if(bar){ bar.style.transition='width '+RIDE_MS+'ms linear'; requestAnimationFrame(()=>{ bar.style.width='100%'; }); }
+  const m0=document.getElementById('meter'); if(m0) m0.textContent='¥'+base.toLocaleString();
   sfx.horn();
   // live-map references + geometry
   const d=DESTS.find(x=>x.id===state.dest);
@@ -84,13 +98,16 @@ function startRide(){
   const t0=performance.now();
   // interval drives the meter AND the map (keeps advancing even if the tab is backgrounded)
   ride=setInterval(()=>{
-    state.fare+=10+Math.floor(Math.random()*18);
+    const el=Math.min(1,(performance.now()-t0)/RIDE_MS);
+    state.fare=Math.round((base+(target-base)*el)/10)*10;          // climbs in ¥10 steps like a real meter
     const m=document.getElementById('meter'); if(m) m.textContent='¥'+state.fare.toLocaleString();
-    const el=Math.min(1,(performance.now()-t0)/RIDE_MS); updateLive(el);
+    updateLive(el);
     if(performance.now()-t0>=RIDE_MS){
       clearInterval(ride); ride=null; updateLive(1); sfx.ding();
+      state.fare=target; state.arrived=true;
+      if(m) m.textContent='¥'+target.toLocaleString();
       const b=document.getElementById('arrbadge'); if(b) b.classList.add('show');
-      const ob=document.getElementById('offbtn'); if(ob) ob.classList.add('pulse');
+      const ob=document.getElementById('offbtn'); if(ob){ ob.disabled=false; ob.classList.add('pulse'); }
     }
   },250);
   // rAF makes the car glide smoothly while the tab is visible
@@ -106,7 +123,7 @@ function startComingEta(){
   const c=CARS.find(x=>x.id===state.car), el=document.getElementById('etamin'); if(!c||!el) return;
   let m=c.wait; const step=Math.max(300, Math.round(2600/Math.max(1,c.wait)));
   etaTimer=setInterval(()=>{ m--; if(m<=0){ el.textContent='0'; clearEta();
-      const chip=el.closest('.etachip'); if(chip) chip.classList.add('arrived');
+      const chip=el.closest('.etapill,.etachip'); if(chip) chip.classList.add('arrived');
       const b=document.getElementById('getinbtn'); if(b) b.classList.add('pulse');
     } else el.textContent=m; }, step);
 }
@@ -115,13 +132,22 @@ function startComingEta(){
 function initSlider(){
   const wrap=document.getElementById('slideconfirm'), knob=document.getElementById('slknob'), fill=document.getElementById('slfill');
   if(!wrap||!knob) return;
-  const pad=5; let x=0, max=0, dragging=false, startX=0;
-  function layout(){ max=Math.max(0, wrap.clientWidth - knob.offsetWidth - pad*2); }
+  // scale = on-screen px per layout px (≠1 when the tablet layout zooms the app) — pointer
+  // positions are divided by it so the knob tracks the finger exactly
+  const pad=5; let x=0, max=0, dragging=false, startX=0, scale=1, fired=false;
+  function layout(){ max=Math.max(0, wrap.clientWidth - knob.offsetWidth - pad*2);
+    const r=wrap.getBoundingClientRect(); scale=(wrap.offsetWidth && r.width) ? r.width/wrap.offsetWidth : 1; }
+  function px(e){ return (e.clientX!=null?e.clientX:0)/scale; }
   function setX(v){ x=Math.max(0,Math.min(max,v)); knob.style.transform='translateX('+x+'px)'; if(fill) fill.style.width=(x+knob.offsetWidth)+'px'; }
-  function down(e){ dragging=true; layout(); startX=(e.clientX!=null?e.clientX:0)-x; try{ knob.setPointerCapture(e.pointerId); }catch(_){} e.preventDefault(); }
-  function move(e){ if(!dragging) return; setX((e.clientX!=null?e.clientX:0)-startX); }
+  function down(e){ if(fired) return; dragging=true; layout();
+    // re-grabbed while it was still springing back? start from where the knob visibly IS
+    knob.style.transition=''; if(fill) fill.style.transition='';
+    const cur=(knob.getBoundingClientRect().left - wrap.getBoundingClientRect().left)/scale - pad;
+    setX(cur);
+    startX=px(e)-x; try{ knob.setPointerCapture(e.pointerId); }catch(_){} e.preventDefault(); }
+  function move(e){ if(!dragging) return; setX(px(e)-startX); }
   function up(){ if(!dragging) return; dragging=false;
-    if(x>=max-6){ setX(max); if(fill) fill.style.width='100%'; wrap.classList.add('slidedone'); knob.textContent='✅'; goSearching(); }
+    if(x>=max-6){ fired=true; setX(max); if(fill) fill.style.width='100%'; wrap.classList.add('slidedone'); knob.textContent='✅'; goSearching(); }
     else { knob.style.transition='transform .2s'; if(fill) fill.style.transition='width .2s'; setX(0); if(fill) fill.style.width='0';
       setTimeout(()=>{ knob.style.transition=''; if(fill) fill.style.transition=''; },220); }
   }
@@ -153,7 +179,8 @@ function confirmOrder(){ state.order=Object.assign({}, pendingOrder); sfx.pay();
 /* ---- self-driving controls + toast ---- */
 function honk(){ sfx.horn(); toast('📣 プップー！'); }
 function pullOver(){ sfx.ding(); toast('✋ とまったよ！ / Stopped'); }
-function toast(msg){ const el=document.createElement('div'); el.className='toast'; el.textContent=msg;
+/* msg is always our own template text (may include the COIN icon markup) — never user input */
+function toast(msg){ const el=document.createElement('div'); el.className='toast'; el.innerHTML=msg;
   (document.querySelector('.app')||document.body).appendChild(el);
   requestAnimationFrame(()=>el.classList.add('show'));
   setTimeout(()=>{ el.classList.remove('show'); setTimeout(()=>el.remove(),250); }, 1100);
@@ -191,7 +218,7 @@ function checkMissions(){
 }
 
 /* ---- navigation ---- */
-function goTop(){ clearRide(); sfx.tap(); state.screen='top'; render(); }
+function goTop(){ clearRide(); sfx.tap(); state.preferCar=null; state.returnTo=null; state.screen='top'; render(); }
 function goPlaces(){ clearRide(); sfx.tap();
   state.screen='home'; state.dest=null; state.car=null; state.driver=null; state.pet=''; state.friend='none'; state.pay=null;
   state.mode='rider'; state.passenger='';
@@ -203,7 +230,11 @@ function goDriverDex(){ sfx.tap(); state.screen='driverdex'; render(); }
 function goDecorate(){ sfx.tap(); state.screen='decorate'; render(); }
 function goMissions(){ sfx.tap(); state.screen='missions'; render(); }
 function pick(id){ const d=DESTS.find(x=>x.id===id); sfx.select(); speak(d?d.jp:'');
-  state.dest=id; state.car=null; state.driver=null; state.mode='rider'; state.order={}; state.screen='cars'; render(); }
+  state.dest=id; state.car=null; state.driver=null; state.mode='rider'; state.order={}; state.screen='cars';
+  // came from the showroom's 「この くるまに のる」? pre-select that car
+  const pc=state.preferCar&&CARS.find(x=>x.id===state.preferCar); state.preferCar=null;
+  if(pc && carUnlocked(pc)){ state.car=pc.id; if(!PROFILE.seenCars[pc.id]){ PROFILE.seenCars[pc.id]=true; saveProfile(); } }
+  render(); }
 function pickCar(id){ const c=CARS.find(x=>x.id===id);
   if(c && !carUnlocked(c)) return;                       // locked: ignore taps
   sfx.play(engineSound(c)); speak(c?c.jp:'');
@@ -246,7 +277,13 @@ function goHome(){ goPlaces(); }               // Back from car picker -> place 
 function toggleMute(btn){ const m=sfx.toggle(); btn.textContent = m?'🔇':'🔊'; if(m) sfx.stopMusic(); else if(state.screen==='riding') sfx.startMusic(PROFILE.music); }
 
 /* ---- hubs ---- */
-function goShop(){ sfx.tap(); state.screen='shop'; render(); }
+/* the shop remembers where it was opened from, so ◀ returns there (e.g. back to the car
+   picker mid-ride instead of dropping the whole ride at the top page) */
+function goShop(){ sfx.tap(); if(state.screen!=='shop') state.returnTo=state.screen; state.screen='shop'; render(); }
+function goBack(){ sfx.tap(); let t=state.returnTo||'top'; state.returnTo=null;
+  if(t==='cars' && !state.dest) t='top';
+  if(!SCREENS[t]) t='top';
+  state.screen=t; render(); }
 function goAchievements(){ sfx.tap(); state.screen='achievements'; render(); }
 function goSettings(){ sfx.tap(); state.screen='settings'; render(); }
 function goGames(){ sfx.tap(); state.screen='games'; render(); }
@@ -257,10 +294,11 @@ function showroomNext(){ state.showroomIdx=(state.showroomIdx||0)+1; sfx.select(
 function showroomPrev(){ state.showroomIdx=(state.showroomIdx||0)-1; sfx.select(); render(); speak(CARS[showroomIndex()].jp); }
 function showroomSpeak(){ const c=CARS[showroomIndex()]; sfx.tap(); speak(c.jp+'。'+carFact(c.id)); }
 function showroomEngine(){ const c=CARS[showroomIndex()]; sfx.play(engineSound(c)); }
+function rideThisCar(id){ const keep=id; goPlaces(); state.preferCar=keep; }
 
 /* ---- shop ---- */
 function buy(id){ const it=SHOP.find(x=>x.id===id); if(!it) return;
-  if(buyItem(it)){ sfx.pay(); toast('🪙 かった！ '+it.jp); } else sfx.tap();
+  if(buyItem(it)){ sfx.pay(); toast(COIN+' かった！ '+it.jp); } else sfx.tap();
   render();
 }
 
@@ -288,8 +326,10 @@ function acceptRide(i){ const r=state.requests&&state.requests[i]; if(!r) return
   state.passenger=r.passenger; state.pet=''; state.friend='none'; state.order={};
   state.screen='riding'; render();
 }
-function goDriverDrop(){ clearRide(); sfx.points();
-  PROFILE.drives=(PROFILE.drives||0)+1; const reward=50+Math.round(Math.random()*30); state.driveReward=reward; earnCoins(reward);
+function goDriverDrop(){ if(!state.arrived) return;      // only after the trip actually finishes
+  clearRide(); sfx.points();
+  // ~ the same as a normal ride pays, so driver mode isn't a two-tap coin farm
+  PROFILE.drives=(PROFILE.drives||0)+1; const reward=15+Math.round(Math.random()*10); state.driveReward=reward; earnCoins(reward);
   PROFILE.places[state.dest]=true; saveProfile(); state.mode='rider'; state.screen='driverdone'; render();
 }
 
@@ -311,7 +351,7 @@ function startFreeDrive(){
   gameTimer=setInterval(()=>{
     if(state.screen!=='freedrive'){ clearGame(); return; }
     if((++spawn)%3===0){ const isCoin=Math.random()<0.76, el=document.createElement('span');
-      el.className='fditem '+(isCoin?'coin':'cone'); el.textContent=isCoin?'🪙':'🚧';
+      el.className='fditem '+(isCoin?'coin':'cone'); el.innerHTML=isCoin?COIN:'🚧';
       const x=0.09+Math.random()*0.82; el.dataset.coin=isCoin?'1':'0'; el.style.left=(x*100)+'%'; el.style.top='-10%';
       stage.appendChild(el); items.push({el,y:-10,x}); }
     for(let k=items.length-1;k>=0;k--){ const it=items[k]; it.y+=7; it.el.style.top=it.y+'%';
@@ -321,11 +361,12 @@ function startFreeDrive(){
       if(it.y>104){ it.el.remove(); items.splice(k,1); }
     }
   },100);
-  const cd=setInterval(()=>{
-    if(state.screen!=='freedrive'){ clearInterval(cd); return; }
+  // countdown lives in the global cdTimer so render() stops it — a leftover countdown used to
+  // end (and pay out) the NEXT game if the kid backed out and re-entered quickly
+  cdTimer=setInterval(()=>{
     timeLeft--; if(timeEl) timeEl.textContent=Math.max(0,timeLeft);
-    if(timeLeft<=0){ clearInterval(cd); clearGame(); earnCoins(score); saveProfile();
-      toast('🪙 +'+score+' ゲット！'); setTimeout(()=>{ if(state.screen==='freedrive') goGames(); },1300); }
+    if(timeLeft<=0){ clearGame(); earnCoins(score); saveProfile();
+      toast(COIN+' +'+score+' ゲット！'); later(1300, goGames); }
   },1000);
 }
 
@@ -338,13 +379,20 @@ function initCarWash(){
   function remove(d){ if(finished || d.classList.contains('gone')) return;
     d.classList.add('gone'); sfx.tap(); remaining--;
     if(remaining<=0){ finished=true; const done=document.getElementById('washdone'); if(done) done.classList.add('show'); sfx.points();
-      PROFILE.washes=(PROFILE.washes||0)+1; earnCoins(40); saveProfile(); toast('🪙 +40 ピカピカ！');
-      setTimeout(()=>{ if(state.screen==='carwash') goGames(); },1600); }
+      PROFILE.washes=(PROFILE.washes||0)+1; earnCoins(40); saveProfile(); toast(COIN+' +40 ピカピカ！');
+      later(1600, goGames); }
   }
   dirts.forEach(d=>{
     d.addEventListener('pointerdown',()=>remove(d));               // tap
-    d.addEventListener('pointerenter',e=>{ if(e.buttons||e.pressure>0) remove(d); }); // drag-scrub
+    d.addEventListener('pointerenter',e=>{ if(e.buttons||e.pressure>0) remove(d); }); // mouse drag-scrub
   });
+  // finger drag-scrub: a touch is captured by the first element it lands on, so pointerenter never
+  // fires on the other spots — hit-test under the finger on every move instead
+  let scrubbing=false;
+  stage.addEventListener('pointerdown',()=>{ scrubbing=true; });
+  ['pointerup','pointercancel','pointerleave'].forEach(t=>stage.addEventListener(t,()=>{ scrubbing=false; }));
+  stage.addEventListener('pointermove',e=>{ if(!scrubbing) return;
+    const t=document.elementFromPoint(e.clientX,e.clientY); if(t && t.classList && t.classList.contains('dirt')) remove(t); });
 }
 
 /* ---- colour-learning mini-game ---- */
@@ -359,16 +407,19 @@ function newColorRound(){ const g=state.colorGame; const target=COLORS[Math.floo
   const choices=[target,a,b];
   for(let i=choices.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=choices[i]; choices[i]=choices[j]; choices[j]=t; }
   g.target=target; g.jp=target.jp; g.en=target.en; g.hex=target.hex; g.choices=choices; g.answer=choices.indexOf(target);
+  g.locked=false; g.missed=false;
 }
 function goColorGame(){ sfx.tap(); state.colorGame={round:1,score:0}; newColorRound(); state.screen='colorgame'; render();
   setTimeout(()=>speak(state.colorGame.jp+'の くるまは どれ？'),300); }
-function colorPick(i){ const g=state.colorGame; if(!g) return;
-  if(i===g.answer){ sfx.points(); g.score++;
+/* locked after a correct tap (double-taps used to pay the prize twice / skip rounds);
+   a round only scores if it was right first try */
+function colorPick(i){ const g=state.colorGame; if(!g || g.locked) return;
+  if(i===g.answer){ g.locked=true; sfx.points(); if(!g.missed) g.score++;
     const msg=document.getElementById('colormsg'); if(msg) msg.textContent='せいかい！ 🎉 correct!';
-    if(g.round>=5){ earnCoins(g.score*10); saveProfile(); toast('🪙 +'+(g.score*10)+'！');
-      setTimeout(()=>{ if(state.screen==='colorgame') goGames(); },1400); return; }
-    g.round++; setTimeout(()=>{ if(state.screen==='colorgame'){ newColorRound(); render(); speak(state.colorGame.jp+'の くるまは どれ？'); } },900);
-  } else { sfx.horn(); const msg=document.getElementById('colormsg'); if(msg) msg.textContent='ちがうよ！ もういちど / try again'; }
+    if(g.round>=5){ const coins=Math.max(10,g.score*10); earnCoins(coins); saveProfile(); toast(COIN+' +'+coins+'！');
+      later(1400, goGames); return; }
+    g.round++; later(900, ()=>{ newColorRound(); render(); speak(state.colorGame.jp+'の くるまは どれ？'); });
+  } else { g.missed=true; sfx.horn(); const msg=document.getElementById('colormsg'); if(msg) msg.textContent='ちがうよ！ もういちど / try again'; }
 }
 
 /* expose to window for inline handlers */
@@ -378,8 +429,9 @@ Object.assign(window, { goTop, goPlaces, goMyPage, goGarage, goDriverDex, goDeco
   openOrder, closeOrder, toggleOrder, confirmOrder, honk, pullOver,
   goShop, goAchievements, goSettings, goGames, buy, setMusic, setName, setNameEn, setAge, toggleReadAloud, doReset,
   goDriverMode, acceptRide, goDriverDrop, goFreeDrive, goCarWash, goColorGame, colorPick,
-  goShowroom, showroomNext, showroomPrev, showroomSpeak, showroomEngine });
+  goShowroom, showroomNext, showroomPrev, showroomSpeak, showroomEngine, rideThisCar, goBack });
 
-/* start: restore saved profile, then draw */
+/* start: restore saved profile, reflect a remembered mute, then draw */
 loadProfile();
+(function(){ const mb=document.getElementById('muteBtn'); if(mb && sfx.isMuted()) mb.textContent='🔇'; })();
 render();

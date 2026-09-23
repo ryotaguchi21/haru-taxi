@@ -93,7 +93,7 @@ function carInner(id){
       s+=`<clipPath id="cb_${id}"><rect x="14" y="84" width="192" height="40" rx="20"/></clipPath><g clip-path="url(#cb_${id})">${ch}</g>`;
       s+=cabinSedan(body);
       // roof lamp (行灯) up top + JPN fender mirror
-      s+=`<rect x="94" y="34" width="44" height="15" rx="5" fill="#fff" stroke="${em||'#e5a712'}" stroke-width="2"/><text x="116" y="45" font-family="Fredoka,sans-serif" font-size="9" font-weight="700" fill="${em?'#8a6a00':'#e5941c'}" text-anchor="middle">TAXI</text>`;
+      s+=`<rect x="94" y="39" width="44" height="15" rx="5" fill="#fff" stroke="${em||'#e5a712'}" stroke-width="2"/><text x="116" y="50" font-family="Fredoka,sans-serif" font-size="9" font-weight="700" fill="${em?'#8a6a00':'#e5941c'}" text-anchor="middle">TAXI</text>`; // sits ON the roof
       s+=`<rect x="48" y="70" width="5" height="11" rx="2" fill="#2b2f3a"/>`;
       s+=`<rect x="188" y="94" width="12" height="8" rx="3" fill="#fff4c2"/>`;
       s+=face(122,70)+smileCheeks(150,100); break;
@@ -122,8 +122,8 @@ function carInner(id){
     case 'tesla': {
       const b='#f4f6f9';
       s+=lowerBody(b,'#d7dde6')+cabinSleek(b,'#d7dde6');
-      // signature full glass roof + grille-less smooth nose + charge-port glow
-      s+=`<path d="M 62 60 Q 108 50 156 62 L 152 66 Q 108 57 66 66 Z" fill="#2a3550" opacity=".55"/>`;
+      // signature: grille-less smooth nose + charge-port glow (the old "glass roof" strip floated
+      // above the cabin like a loose bar, so it's gone)
       s+=`<rect x="196" y="92" width="8" height="12" rx="4" fill="#eef1f6"/>`;
       s+=`<rect x="186" y="90" width="12" height="10" rx="4" fill="#ff5a4d"/>`;
       s+=`<circle cx="20" cy="103" r="4" fill="#7cf3ff"/>`;
@@ -160,7 +160,7 @@ function carInner(id){
       s+=`<g fill="#bfe9ff">${[0,1,2,3].map(i=>`<rect x="${30+i*42}" y="52" width="32" height="24" rx="4"/>`).join('')}</g>`;
       s+=`<rect x="18" y="96" width="188" height="6" fill="#ffd84d"/>`;
       s+=`<rect x="188" y="60" width="8" height="12" rx="2" fill="#fff4c2"/>`;
-      s+=face(60,68,20)+smileCheeks(50,96); break;
+      s+=face(172,64,18)+smileCheeks(166,92); break;   // face on the front pane (headlight side)
     }
     case 'train': {
       const b=a.body||'#3aae5a';
@@ -169,7 +169,7 @@ function carInner(id){
       s+=`<rect x="150" y="28" width="32" height="14" rx="4" fill="${b}"/><line x1="166" y1="28" x2="166" y2="16" stroke="#9aa3b2" stroke-width="3"/><rect x="150" y="14" width="30" height="4" rx="2" fill="#9aa3b2"/>`;
       s+=`<g fill="#bfe9ff">${[0,1,2].map(i=>`<rect x="${38+i*48}" y="50" width="36" height="26" rx="6"/>`).join('')}</g>`;
       s+=`<rect x="22" y="96" width="176" height="7" fill="#ffd84d"/>`;
-      s+=face(170,70,18)+smileCheeks(56,98); break;
+      s+=face(170,70,18)+smileCheeks(170,90); break;   // smile under the eyes
     }
     case 'shinkansen': {
       const b=a.body||'#eef2f6';
@@ -178,7 +178,7 @@ function carInner(id){
       s+=`<path d="M 22 82 L 202 82 L 202 90 L 22 90 Z" fill="#2f6fd8"/>`;
       s+=`<path d="M 152 55 Q 200 60 200 80 L 166 80 Z" fill="#bfe9ff"/>`;
       s+=`<g fill="#bfe9ff">${[0,1,2].map(i=>`<rect x="${44+i*34}" y="58" width="24" height="15" rx="4"/>`).join('')}</g>`;
-      s+=face(74,70,17)+smileCheeks(46,94); break;
+      s+=face(176,69,14)+smileCheeks(176,90); break;   // face on the nose window, not the tail
     }
     case 'firetruck': {
       s+=lowerBody('#e8362b');
@@ -187,7 +187,7 @@ function carInner(id){
       s+=`<rect x="34" y="42" width="120" height="6" rx="3" fill="#c9cfd8" transform="rotate(-7 34 42)"/>`;
       s+=`<rect x="92" y="24" width="24" height="11" rx="5" fill="#ff3b30"/>`;
       s+=`<circle cx="150" cy="70" r="7" fill="#fff" stroke="#c9cfd8" stroke-width="2"/>`;
-      s+=face(128,58,24)+smileCheeks(60,102); break;
+      s+=face(128,58,24)+smileCheeks(132,100); break;   // smile under the eyes
     }
     case 'dump': {
       const b=a.body||'#ffb020';
@@ -203,10 +203,11 @@ function carInner(id){
       s+=`<path d="M 16 110 L 28 92 Q 58 80 108 78 Q 150 78 182 88 L 202 100 Q 206 110 198 114 L 22 114 Q 14 112 16 110 Z" fill="${b}" stroke="rgba(0,0,0,.08)" stroke-width="2"/>`;
       s+=`<path d="M 74 80 Q 98 64 126 66 Q 150 68 160 84 L 78 84 Z" fill="${b}"/>`;
       s+=`<path d="M 80 80 Q 100 68 124 70 Q 144 72 152 82 L 82 82 Z" fill="#bfe9ff"/>`;
-      s+=`<path d="M 150 90 L 176 90 L 170 104 L 150 104 Z" fill="#7a0f08"/>`;      // side intake
-      s+=`<rect x="90" y="86" width="15" height="17" rx="3" fill="#ffd400" stroke="#c9a400" stroke-width="1.5"/>`; // yellow shield
-      s+=`<path d="M 197 96 l 9 3 -9 4 z" fill="#fff4c2"/>`;
-      s+=`<rect x="16" y="98" width="9" height="9" rx="2" fill="#8a0f08"/>`;
+      // details kept clear of the cartoon face (eyes ~x103-121, smile ~x137-163)
+      s+=`<path d="M 50 96 L 72 91 L 70 102 L 52 102 Z" fill="#7a0f08"/>`;         // side intake over the rear wheel
+      s+=`<rect x="178" y="89" width="10" height="11" rx="2.5" fill="#ffd400" stroke="#c9a400" stroke-width="1.2"/>`; // small shield on the front fender
+      s+=`<path d="M 192 96 l 9 3 -9 4 z" fill="#fff4c2"/>`;                        // headlight inside the nose
+      s+=`<rect x="24" y="99" width="8" height="7" rx="2" fill="#8a0f08"/>`;       // tail-light inside the bumper
       s+=face(112,80,18)+smileCheeks(150,104); break;
     }
     case 'porsche': {
@@ -214,8 +215,8 @@ function carInner(id){
       s+=`<path d="M 18 112 L 24 96 Q 42 86 74 84 L 150 84 Q 186 86 200 104 Q 204 112 196 114 L 24 114 Q 14 114 18 112 Z" fill="${b}" stroke="#c4c9d2" stroke-width="2"/>`;
       s+=`<path d="M 60 84 Q 78 60 118 60 Q 162 62 186 100 L 186 84 Z" fill="${b}" stroke="#c4c9d2" stroke-width="2"/>`; // 911 fastback hump
       s+=`<path d="M 74 82 Q 90 66 118 66 Q 148 68 168 82 Z" fill="#bfe9ff"/>`;
-      s+=`<ellipse cx="196" cy="96" rx="5" ry="6" fill="#fff4c2"/>`;               // round headlight
-      s+=`<rect x="18" y="94" width="12" height="6" rx="3" fill="#c40000"/>`;      // full-width tail hint
+      s+=`<ellipse cx="190" cy="98" rx="4.5" ry="5.5" fill="#fff4c2"/>`;           // round headlight (inside the nose)
+      s+=`<rect x="24" y="98" width="12" height="5" rx="2.5" fill="#c40000"/>`;    // tail-light strip inside the bumper
       s+=emblem(108,98,'#c8102e')+face(112,78,20)+smileCheeks(150,104); break;
     }
     case 'lambo': {
@@ -223,9 +224,9 @@ function carInner(id){
       s+=`<path d="M 16 112 L 42 90 L 98 82 L 150 82 L 190 92 L 204 108 L 200 114 L 20 114 Z" fill="${b}" stroke="#c9a400" stroke-width="2"/>`;
       s+=`<path d="M 80 82 L 100 68 L 132 68 L 152 82 Z" fill="#1a1a1a"/>`;
       s+=`<path d="M 86 80 L 102 70 L 128 70 L 144 80 Z" fill="#7cf3ff" opacity=".85"/>`;
-      s+=`<path d="M 150 92 L 172 92 L 168 102 L 150 102 Z" fill="#1a1a1a"/>`;      // hex intake
-      s+=`<path d="M 190 96 l 12 2 -12 4 z" fill="#fff4c2"/>`;
-      s+=`<path d="M 20 98 l 15 0 -2 8 -13 0 z" fill="#8a0f08"/>`;                  // Y taillight
+      s+=`<path d="M 50 97 L 70 90 L 72 102 L 52 102 Z" fill="#1a1a1a"/>`;         // big intake over the rear wheel (clear of the face)
+      s+=`<path d="M 184 95 l 11 2 -11 4 z" fill="#fff4c2"/>`;                      // headlight inside the nose
+      s+=`<path d="M 32 100 l 12 0 -2 6 -12 0 z" fill="#8a0f08"/>`;                  // Y tail-light inside the bumper
       s+=face(114,75,16)+smileCheeks(150,104); break;
     }
     case 'muscle': {
@@ -363,7 +364,11 @@ function navMapSVG(opts){
   opts = opts || {};
   const o = MAP_ORIGIN;
   const dest = opts.dest ? DESTS.find(x=>x.id===opts.dest) : null;
-  let s = `<svg viewBox="0 0 360 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ちず map">`;
+  // crop: frame just the band between the destination pin and "you are here" (full width,
+  // so it never letterboxes). At least 164 tall = the slim card's 2.2:1 shape.
+  let vb = '0 0 360 250';
+  if(opts.crop && dest){ const bottom=240; let top=Math.max(0, dest.pos.y-58); if(bottom-top<164) top=bottom-164; vb=`0 ${top} 360 ${bottom-top}`; }
+  let s = `<svg viewBox="${vb}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ちず map">`;
   // land + water + park
   s += `<rect x="0" y="0" width="360" height="250" fill="#e9edf2"/>`;
   s += `<path d="M -10 214 C 70 224, 150 214, 200 236 L 200 260 L -10 260 Z" fill="#a9d6f5"/>`;
@@ -399,6 +404,9 @@ function navMapSVG(opts){
   // pickup / you-are-here dot
   s += `<g class="meloc"><circle cx="${o.x}" cy="${o.y}" r="20" fill="#3d8bff" opacity=".18"/>`
      + `<circle cx="${o.x}" cy="${o.y}" r="9" fill="#3d8bff" stroke="#fff" stroke-width="3"/></g>`;
+  // "you are here" label beside the dot (home map) — used to be an HTML chip that covered the dot
+  if(opts.pins==='all') s += `<g><rect x="${o.x+14}" y="${o.y-11}" width="74" height="22" rx="11" fill="#fff" opacity=".96"/>`
+     + `<text x="${o.x+51}" y="${o.y+4.5}" font-family="'M PLUS Rounded 1c',sans-serif" font-size="11.5" font-weight="700" fill="#2f4368" text-anchor="middle">いま ここ</text></g>`;
   // little car driving to the pickup (coming screen)
   if(opts.approach && opts.carId){
     const ap = `M ${o.x-150} ${o.y-78} C ${o.x-80} ${o.y-34}, ${o.x-34} ${o.y-10}, ${o.x} ${o.y}`;

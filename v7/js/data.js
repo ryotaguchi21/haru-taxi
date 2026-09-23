@@ -12,6 +12,13 @@ const CONFIG = {
   storeKey: 'haruTaxi.v7'  // v7 keeps its own save, separate from the original app
 };
 
+/* In-app coin icon. Drawn with CSS (.coin) instead of the 🪙 emoji, which is missing
+   from Windows' emoji font and older iOS — it rendered as a blank box there. */
+const COIN = '<i class="coin" aria-hidden="true"></i>';
+
+/* escape user-typed text before it goes into an HTML template (settings name field) */
+function escapeHTML(s){ return String(s==null?'':s).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+
 /* Drop-off destinations.
    pos   = pin location on the map SVG (0..360 x, 0..250 y)
    scene = which mini-scene to draw on the riding screen (see sceneSVG in art.js) */
@@ -120,7 +127,7 @@ const PAYMENTS = [
   { id:'paypay', jp:'ペイペイ',         en:'PayPay',    pic:'📱', bg:'#ff2d4b', psh:'#c81834' },
   { id:'suica',  jp:'スイカ',           en:'Suica IC',  pic:'🎫', bg:'#3aae4a', psh:'#2c8a39' },
   { id:'card',   jp:'クレジットカード', en:'Card',      pic:'💳', bg:'#3d8bff', psh:'#2f6fd8' },
-  { id:'genkin', jp:'げんきん',         en:'Cash',      pic:'🪙', bg:'#ffab2e', psh:'#dd8a12' },
+  { id:'genkin', jp:'げんきん',         en:'Cash',      pic:'💴', bg:'#ffab2e', psh:'#dd8a12' },
 ];
 
 /* In-car snacks & drinks the child can order during the ride. yen adds to the fare. */
@@ -274,6 +281,8 @@ function updateStreak(){
   if(s.last!==t){ s.count = (s.last===yesterdayKey()) ? (s.count+1) : 1; s.last=t; }
   PROFILE.streak=s; return s;
 }
+/* streak to DISPLAY: a streak whose last ride was before yesterday is already broken */
+function streakCount(){ const s=PROFILE.streak||{}; return (s.last===todayKey()||s.last===yesterdayKey()) ? (s.count||0) : 0; }
 
 /* ---- coin shop (spend coins earned from rides & missions) ---- */
 const SHOP = [
@@ -286,9 +295,16 @@ const SHOP = [
   { id:'pet:tiger',    kind:'pet', ref:'tiger',    jp:'トラ',             emoji:'🐯', cost:90  },
   { id:'pet:dragon',   kind:'pet', ref:'dragon',   jp:'ドラゴン',         emoji:'🐉', cost:150 },
 ];
-function canBuy(item){ return !owns(item.id) && PROFILE.coins>=item.cost; }
+/* a car counts as owned once it's usable — e.g. the spaceship unlocked by 5 rides
+   must not still be for sale */
+function shopOwned(item){
+  if(owns(item.id)) return true;
+  if(item.kind==='car'){ const c=CARS.find(x=>x.id===item.ref); return !!(c && carUnlocked(c)); }
+  return false;
+}
+function canBuy(item){ return !shopOwned(item) && PROFILE.coins>=item.cost; }
 function buyItem(item){
-  if(owns(item.id) || PROFILE.coins<item.cost) return false;
+  if(shopOwned(item) || PROFILE.coins<item.cost) return false;
   PROFILE.coins-=item.cost; PROFILE.owned=PROFILE.owned||{}; PROFILE.owned[item.id]=true; saveProfile(); return true;
 }
 
@@ -306,7 +322,7 @@ function engineSound(car){
   const k=car.art&&car.art.kind;
   if(car.id==='uchusen') return 'warp';
   if(car.sound==='siren') return 'siren';
-  if(k==='sport') return 'vroom';
+  if(['sport','ferrari','porsche','lambo','muscle','gtr'].indexOf(k)>=0) return 'vroom';
   if(k==='shinkansen') return 'whoosh';
   if(k==='train') return 'traintoot';
   if(k==='bus') return 'bushorn';
@@ -323,7 +339,7 @@ const ACHIEVEMENTS = [
   { id:'carsall',   icon:'🏆', jp:'くるま ぜんぶ',       en:'All cars',        cond:()=>Object.keys(PROFILE.seenCars).length>=CARS.length },
   { id:'placesall', icon:'🗺️', jp:'ばしょ ぜんぶ',       en:'All places',      cond:()=>Object.keys(PROFILE.places).length>=DESTS.length },
   { id:'drivers10', icon:'🧑', jp:'ドライバー 10にん',   en:'10 drivers',      cond:()=>Object.keys(PROFILE.seenDrivers).length>=10 },
-  { id:'coins500',  icon:'🪙', jp:'コイン 500 ためた',   en:'500 coins',       cond:()=>(PROFILE.coinsEver||0)>=500 },
+  { id:'coins500',  icon:'💰', jp:'コイン 500 ためた',   en:'500 coins',       cond:()=>(PROFILE.coinsEver||0)>=500 },
   { id:'streak7',   icon:'🔥', jp:'7にち れんぞく',      en:'7-day streak',    cond:()=>(PROFILE.streak&&PROFILE.streak.count>=7) },
   { id:'space',     icon:'🛰️', jp:'うちゅうへ いった',   en:'To space',        cond:()=>!!PROFILE.places.space },
   { id:'driver',    icon:'🎓', jp:'うんてんしゅに なった', en:'Became a driver', cond:()=>(PROFILE.drives||0)>=1 },
