@@ -28,21 +28,29 @@ function topScreen(){
 
 /* ---- SHOWROOM / モーターショー — one car at a time, big, with a spoken fact ---- */
 function showroomIndex(){ const n=CARS.length; return ((((state.showroomIdx||0))%n)+n)%n; }
+/* the car and the ◀ ▶ buttons share one row so switching never scrolls the car away (Astra U03) */
 function showroomScreen(){
-  const c=CARS[showroomIndex()], i=showroomIndex();
+  const c=CARS[showroomIndex()], i=showroomIndex(), rear=!!state.showRear && hasRearView(c.id);
+  const paintRow = (canPaint(c) && carUnlocked(c))
+    ? `<div class="sechead sm"><h2>いろを ぬる<span class="en">Paint it</span></h2></div>
+       <div class="paintrow">${PAINTS.map(p=>`<button class="paintdot${paintFor(c.id)===p.hex?' on':''}" style="--pc:${p.hex}" onclick="paintCar('${c.id}','${p.hex}')" aria-label="${p.jp}"></button>`).join('')}
+         <button class="paintdot reset${paintFor(c.id)?'':' on'}" onclick="paintCar('${c.id}','')" aria-label="もとの いろ / original">↺</button></div>` : '';
   return `<div class="screen"><div class="topbar blue"><button class="backbtn" onclick="goTop()">◀ トップ Top</button><p class="hello">🏎️ モーターショー / Showroom</p><h1 class="title">${c.jp}<span class="en">${c.en}</span></h1></div>
-    <div class="scroll"><div class="showcar">${carSVG(c.id)}</div>
-      <div class="showfact">💬 ${carFact(c.id)}</div>
+    <div class="scroll"><div class="showstage">
+        <button class="navbtn side" onclick="showroomPrev()" aria-label="まえの くるま / previous car">◀</button>
+        <div class="showcar${rear?' rear':''}">${rear?carRearSVG(c.id):carSVG(c.id)}</div>
+        <button class="navbtn side" onclick="showroomNext()" aria-label="つぎの くるま / next car">▶</button></div>
+      <p class="showcount">${i+1} / ${CARS.length}</p>
       <div class="showbtns">
         <button class="showbtn" onclick="showroomSpeak()">🔊<span>なまえ</span></button>
         <button class="showbtn" onclick="showroomEngine()">🏁<span>エンジン</span></button>
+        ${hasRearView(c.id)?`<button class="showbtn" onclick="showroomFlip()">🔄<span>${rear?'まえ':'うしろ'}</span></button>`:''}
       </div>
-      <div class="shownav"><button class="navbtn" onclick="showroomPrev()" aria-label="まえの くるま / previous car">◀</button>
-        <span class="showcount">${i+1} / ${CARS.length}</span>
-        <button class="navbtn" onclick="showroomNext()" aria-label="つぎの くるま / next car">▶</button></div>
       <div class="gobar">${ carUnlocked(c)
         ? `<button class="gobtn" onclick="rideThisCar('${c.id}')">🚕 この くるまに のる <span class="en">Ride this car</span></button>`
         : `<button class="gobtn" disabled>🔒 まだ のれないよ <span class="en">Locked</span></button>` }</div>
+      ${paintRow}
+      <div class="showfact">💬 ${carFact(c.id)}</div>
     </div></div>`;
 }
 
@@ -96,16 +104,20 @@ function carsScreen(){
   }).join('');
   const chosen=state.car?CARS.find(x=>x.id===state.car):null;
   const chosenEst=chosen?estFare(chosen):0;
+  // a TAP anywhere on the bar calls the car (it glides across by itself); dragging still works.
+  // The chosen car sits right above the bar so "what am I calling?" is answered by a picture.
   const confirm = chosen ? `
-    <div class="slideconfirm" id="slideconfirm">
-      <div class="sltrack"><span class="sllabel">スライドして よぶ / slide to search →</span></div>
+    <p class="slsub"><span class="slcar">${carSVG(chosen.id)}</span><span><b>${chosen.jp}</b> · ${chosenEst?'¥'+chosenEst.toLocaleString():'むりょう'}</span></p>
+    <div class="slideconfirm" id="slideconfirm" role="button" aria-label="この くるまを よぶ / call this car">
+      <div class="sltrack"><span class="sllabel">この くるまを よぶ →<small>tap / slide</small></span></div>
       <div class="slfill" id="slfill"></div>
-      <button class="slknob" id="slknob" aria-label="スライドして タクシーを よぶ">🚕</button>
-    </div>
-    <p class="slsub">${chosen.jp} · ${chosenEst?'¥'+chosenEst.toLocaleString():'むりょう'} · ${d.jp}へ</p>`
+      <button class="slknob" id="slknob" aria-label="タクシーを よぶ">🚕</button>
+    </div>`
     : `<button class="gobtn" disabled>くるまを えらんでね<span class="en">pick a car first</span></button>`;
+  // the map shrinks to a thumbnail here — this screen is about CARS (Astra U01)
   return `<div class="screen"><div class="topbar blue"><button class="backbtn" onclick="goHome()">◀ もどる Back</button><p class="hello">${d.emoji} ${d.jp} へ / to ${d.en}</p><h1 class="title">どの くるま？<span class="en">Choose a ride</span></h1></div>
-    <div class="scroll"><div class="routemap"><div class="mapcard slim">${navMapSVG({pins:'dest',dest:state.dest,route:true,crop:true})}</div></div>
+    <div class="scroll carsscroll"><div class="tripbar"><div class="tripmap">${navMapSVG({pins:'dest',dest:state.dest,route:true,crop:true})}</div>
+      <div class="tripinfo"><b class="${d.jp.length>8?'xl':(d.jp.length>5?'lg':'')}">${d.emoji} ${d.jp}</b><span>🕐 ${etaMinutes(d)}ふん くらい</span></div></div>
     ${shelves}
     ${petStripHTML()}
     ${friendStripHTML()}
@@ -172,23 +184,36 @@ function ridingScreen(){
   const friendChip = fr ? `<div class="ridefriend">${fr.emoji} ${fr.jp} も いっしょ！</div>` : '';
   const honk = `<div class="honkrow"><button class="honkbtn" onclick="honk()">📣 クラクション<span class="en">Honk!</span></button>${c.selfDriving?'<button class="honkbtn stop" onclick="pullOver()">✋ とまって<span class="en">Stop</span></button>':''}</div>`;
   const header = driverMode
-    ? `<div class="topbar purple"><p class="hello">🎓 うんてんしゅモード</p><h1 class="title">${d.emoji} ${d.jp} へ おくる<span class="en">You're driving!</span></h1></div>`
-    : `<div class="topbar green"><p class="hello">${c.jp} 🚕💨</p><h1 class="title">ドライブ ちゅう！<span class="en">Riding to ${d.en}</span></h1></div>`;
+    ? `<div class="topbar purple"><p class="hello">🎓 うんてんしゅモード</p><h1 class="title" id="ridetitle">${d.emoji} ${d.jp} へ おくる<span class="en">You're driving!</span></h1></div>`
+    : `<div class="topbar green"><p class="hello">${c.jp} 🚕💨</p><h1 class="title" id="ridetitle">ドライブ ちゅう！<span class="en">Riding to ${d.en}</span></h1></div>`;
   const meterBlock = driverMode ? '' : `
       <div class="meterbox"><span class="mlab">メーター<small>${c.mult?'meter':'free ride'}</small></span><b id="meter">¥${c.mult?CONFIG.baseFare:0}</b></div>
       <div class="orderrow">
         <button class="orderbtn" onclick="openOrder()">🍽️ たべもの・のみものを ちゅうもんする<span class="en">Order snacks &amp; drinks</span></button>
         <div class="ordertray" id="ordertray">${orderTrayHTML()}</div>
       </div>`;
-  // sticky so the get-off button is always on screen when the car arrives (it used to be below
-  // the fold on a phone). In driver mode it unlocks only on arrival — no instant coin farming.
-  const bottom = driverMode
-    ? `<div class="gobar sticky"><button class="gobtn yellow" id="offbtn" onclick="goDriverDrop()" disabled>とうちゃく！ おろす <span class="en">Drop off →</span></button></div>`
-    : `<div class="gobar sticky"><button class="gobtn yellow" id="offbtn" onclick="goPay()">おりて はらう <span class="en">Get off &amp; pay →</span></button></div>`;
+  // sticky bottom bar. While driving it offers 「すぐ とうちゃく」 (fast-forward — the car still
+  // slows and stops properly); once the car has stopped it becomes 「ついた！ おりる」 (Astra U04).
+  // Driver mode only pays on arrival, so skipping ahead is never a coin farm.
+  const bottom = `<div class="gobar sticky"><button class="gobtn skip" id="offbtn" onclick="rideButton()">⏩ すぐ とうちゃく <span class="en">Skip ahead</span></button>
+      <button class="morebtn" id="morebtn" onclick="moreDrive()" hidden>🔁 もっと ドライブ <span class="en">Keep driving</span></button></div>`;
+  const k=c.art.kind;
+  const motion = ['train','shinkansen'].indexOf(k)>=0 ? 'm-rail'
+    : k==='spaceship' ? 'm-float'
+    : ['ferrari','lambo','porsche','gtr','sport','muscle','mazda','tesla'].indexOf(k)>=0 ? 'm-sport'
+    : ['alphard','bus','dump','firetruck','van','volvo'].indexOf(k)>=0 ? 'm-heavy' : 'm-car';
+  const walker = driverMode ? `<span class="wkface">${state.passenger||'🧑'}</span>`
+    : `<span class="wkav">${avatarSVG()}</span>${state.pet?`<span class="wkpet">${(petById(state.pet)||{}).emoji||''}</span>`:''}`;
+  const outdoor = ['space','aquarium'].indexOf(d.scene)<0;
   return `<div class="screen">${header}
     <div class="scroll">
-      <div class="ridestage"><div class="ridescene">${sceneSVG(d.scene, w)}</div>${weatherOverlayHTML(w)}
-        <div class="ridecar idlecar">${carSVG(c.id,{decor:true,pet:rider})}</div><div class="roadstrip"></div>
+      <div class="ridestage ${motion} parked${w.time==='night'?' night':''}" id="ridestage"><div class="ridescene">${sceneSVG(d.scene, w)}</div>
+        ${outdoor?`<div class="farlayer">${cloudStripSVG(w)}</div>`:''}${weatherOverlayHTML(w)}
+        ${outdoor?`<div class="nearlayer">${nearStripSVG(w,d.scene)}</div>`:''}
+        <div class="destgate" id="destgate">${destGateSVG(d,w)}</div>
+        <div class="ridecar idlecar">${carSVG(c.id,{decor:true,pet:rider,door:true})}</div>
+        <div class="walker boarding" id="walker">${walker}<span class="wkwave">👋</span></div>
+        <div class="roadstrip${motion==='m-rail'?' rail':''}"></div>
         <div class="arrbadge" id="arrbadge">とうちゃく！ 🎉</div></div>
       ${friendChip}
       <div class="livewrap"><div class="livehead"><span class="navi">🧭 ${d.emoji} ${d.jp}へ</span><span class="etapill">あと <b id="etamin">${etaMinutes(d)}</b> ふん</span></div>
@@ -196,7 +221,7 @@ function ridingScreen(){
       <div class="progwrap"><div class="progbar" id="progbar"></div></div>
       ${meterBlock}
       ${honk}
-      <p class="maphint">${d.emoji} ${d.jp} まで あと ちょっと！ almost at ${d.en}</p>
+      <p class="maphint" id="ridehint">${driverMode?'🚪 おきゃくさんが のるよ…':'🚪 のるよ… シートベルト カチッ！'}</p>
       ${bottom}
     </div></div>`;
 }
@@ -256,27 +281,24 @@ function confettiHTML(){ const emo=['⭐','🎊','🎉','✨','🌟','💛'];
 function doneScreen(){
   const d=DESTS.find(x=>x.id===state.dest), c=CARS.find(x=>x.id===state.car), p=PAYMENTS.find(x=>x.id===state.pay);
   const total=state.paidTotal||state.fare, items=orderList(state.order), sc=Math.max(1,streakCount());
-  const unlocked = state.justUnlocked ? `<div class="unlockbanner">🎉 うちゅうせん が あいたよ！<span>Spaceship unlocked — try it next!</span></div>` : '';
-  const streak = `<div class="streakline">🔥 ${sc}にち れんぞく！<span>${sc}-day streak</span></div>`;
-  const missions = (state.newMissions&&state.newMissions.length)
-    ? state.newMissions.map(m=>`<div class="missionbanner">🎯 ミッション クリア！ ${m.jp} <b>+${m.reward}</b></div>`).join('') : '';
-  const ate = items.length ? `<p class="paidline">${items.map(it=>it.emoji).join('')} たべた・のんだ！ yum!</p>` : '';
-  const pet = state.pet ? `<p class="paidline">${(petById(state.pet)||{}).emoji} も いっしょ だったね！</p>` : '';
+  // Astra U05 + Q2: the next action comes right after the car; rewards are ONE coin number plus
+  // at most a banner or two. Details (points, streaks, collections) live on My Page / the garage.
+  const banners = [];
+  if(state.justUnlocked) banners.push(`<div class="unlockbanner">🎉 うちゅうせん が あいたよ！<span>Spaceship unlocked — try it next!</span></div>`);
+  if(state.newCard) banners.push(`<div class="cardbanner"><span class="cbart">${carSVG(c.id)}</span><span><b>あたらしい カード！</b>${c.jp} が ずかんに はいったよ</span></div>`);
+  (state.newMissions||[]).forEach(m=>banners.push(`<div class="missionbanner">🎯 ミッション クリア！ ${m.jp} <b>${COIN}+${m.reward}</b></div>`));
+  const extras = [items.length?items.map(it=>it.emoji).join(''):'', state.pet?((petById(state.pet)||{}).emoji||''):'', sc>1?`🔥${sc}`:''].filter(Boolean).join(' ');
   return `<div class="screen"><div class="topbar green"><p class="hello">${d.emoji} ${d.jp}</p><h1 class="title">ありがとう！<span class="en">Thank you!</span></h1></div>
     <div class="scroll"><div class="done">${confettiHTML()}
-      <div class="thanksstage idlecar">${carSVG(c.id,{decor:true,pet:state.pet})}</div>
-      <h2 class="bigmsg" style="margin-top:8px">また のってね！<span class="en">See you again!</span></h2>
-      ${unlocked}${missions}
-      <div class="ptcard"><div class="plab">⭐ ポイント ゲット！</div><div class="pnum">+${state.points}</div><div class="pen">You earned ${state.points} points!</div></div>
-      <div class="coinline">${COIN} コイン ぜんぶで <b>${(PROFILE.coins||0).toLocaleString()}</b></div>
-      ${streak}
-      <p class="paidline">${p.pic} ${p.jp} で ¥${total.toLocaleString()} はらったよ</p>
-      ${ate}${pet}
+      <div class="thanksstage sm idlecar">${carSVG(c.id,{decor:true,pet:state.pet})}</div>
+      <div class="coinearn">${COIN} <b>+${state.coinsEarned||0}</b><span>コイン ゲット！ · ぜんぶで ${(PROFILE.coins||0).toLocaleString()}</span></div>
       <div class="gobar" style="width:100%;max-width:340px"><button class="gobtn yellow" onclick="goPlaces()">もういちど のる ↺ <span class="en">Ride again</span></button></div>
       <div class="menurow" style="width:100%;max-width:340px">
-        <button class="menubtn" onclick="goMyPage()"><span class="mpi">👦</span><b>マイページ</b><span>My Page</span></button>
-        <button class="menubtn" onclick="goDriverDex()"><span class="mpi">🧑</span><b>ドライバー</b><span>Drivers</span></button>
+        <button class="menubtn" onclick="goTop()"><span class="mpi">🏠</span><b>トップ</b><span>Home</span></button>
+        <button class="menubtn" onclick="goGarage()"><span class="mpi">🚗</span><b>ずかん</b><span>Garage</span></button>
       </div>
+      ${banners.slice(0,2).join('')}
+      <p class="paidline">${p.pic} ¥${total.toLocaleString()} はらったよ ${extras}</p>
     </div></div></div>`;
 }
 
@@ -347,16 +369,19 @@ function decorateScreen(){
 }
 
 /* ---- MISSIONS / ミッション ---- */
+/* ONE mission at a time (Astra Q2): the current one is big; finished ones are a row of badges */
 function missionsScreen(){
-  const s={count:streakCount()};
-  const rows=MISSIONS.map(m=>{ const prog=missionProgress(m), done=missionDone(m), pct=Math.round(prog/m.goal*100);
-    return `<div class="mrow${done?' done':''}"><div class="mic">${m.icon}</div>
-      <div class="mbody"><b>${m.jp}</b><span>${m.en}</span><div class="mbar"><div class="mfill" style="width:${pct}%"></div></div></div>
-      <div class="mright">${done?'<span class="mdone">✓</span>':`<span class="mcount">${prog}/${m.goal}</span>`}<small>+${m.reward}</small></div></div>`;
-  }).join('');
+  const cur=currentMission(), done=MISSIONS.filter(missionDone);
+  const curCard = cur ? (()=>{ const prog=missionProgress(cur), pct=Math.round(prog/cur.goal*100);
+      return `<div class="mission-now"><div class="mnlab">いまの ミッション / Now</div><div class="mnic">${cur.icon}</div>
+        <b>${cur.jp}</b><span class="mnen">${cur.en}</span>
+        <div class="mbar big"><div class="mfill" style="width:${pct}%"></div></div>
+        <div class="mnfoot"><span>${prog} / ${cur.goal}</span><span>${COIN} +${cur.reward}</span></div></div>`; })()
+    : `<div class="mission-now"><div class="mnic">🏆</div><b>ぜんぶ クリア！</b><span class="mnen">All missions done!</span></div>`;
+  const badges = done.length ? `<div class="sechead sm"><h2>クリアした ミッション<span class="en">Done</span></h2></div>
+    <div class="mdonerow">${done.map(m=>`<span class="mbadge" title="${m.jp}">${m.icon}<i>✓</i></span>`).join('')}</div>` : '';
   return `<div class="screen"><div class="topbar purple"><button class="backbtn" onclick="goTop()">◀ トップ Top</button><p class="hello">ミッション / Missions</p><h1 class="title">やってみよう！<span class="en">Missions</span></h1></div>
-    <div class="scroll"><div class="streakcard"><span class="fire">🔥</span><div><b>${s.count}にち れんぞく</b><span>${s.count}-day streak · まいにち のろう！</span></div></div>
-    <div class="missions">${rows}</div>
+    <div class="scroll">${curCard}${badges}
     <div class="gobar"><button class="gobtn" onclick="goPlaces()">🚕 タクシーにのる<span class="en">Ride now</span></button></div></div></div>`;
 }
 
@@ -373,7 +398,7 @@ function myPageScreen(){
       </div>
       <div class="statgrid four">
         <div class="stat"><span class="sv">${p.rides}</span><span class="sl">🚕 のった<small>rides</small></span></div>
-        <div class="stat"><span class="sv">${p.points}</span><span class="sl">⭐ ポイント<small>points</small></span></div>
+        <div class="stat"><span class="sv">${CARS.filter(c=>PROFILE.seenCars[c.id]).length}</span><span class="sl">🚗 くるま<small>cars</small></span></div>
         <div class="stat"><span class="sv">${p.coins||0}</span><span class="sl">${COIN} コイン<small>coins</small></span></div>
         <div class="stat"><span class="sv">${placesVisited}</span><span class="sl">📍 ばしょ<small>places</small></span></div>
       </div>
@@ -431,14 +456,17 @@ function settingsScreen(){
       <div class="setrow"><label for="setNameEn">ローマじ / En</label><input id="setNameEn" value="${escapeHTML(p.nameEn)}" oninput="setNameEn(this.value)"></div>
       <div class="setrow"><label>とし / Age</label><input id="setAge" type="number" min="1" max="12" value="${p.age}" oninput="setAge(this.value)"></div>
       <div class="setrow"><label>🔊 よみあげ / Read aloud</label><button class="toggle${p.readAloud?' on':''}" onclick="toggleReadAloud(this)">${p.readAloud?'ON':'OFF'}</button></div>
+      <div class="setrow"><label>🔤 えいご / English labels</label><button class="toggle${p.showEn!==false?' on':''}" onclick="toggleEnglish(this)">${p.showEn!==false?'ON':'OFF'}</button></div>
       <div class="sechead sm"><h2>おんがく<span class="en">Music</span></h2></div><div class="worldrow">${music}</div>
       <div class="setrow danger"><label>データを けす / Reset</label><button class="resetbtn" onclick="doReset()">リセット</button></div>
+      ${hasUndo()?`<div class="setrow"><label>↩️ リセットを とりけす / Undo reset</label><button class="resetbtn undo" onclick="doUndoReset()">もとに もどす</button></div>`:''}
     </div></div></div>`;
 }
 
 /* ---- GAMES hub / ミニゲーム ---- */
 function gamesScreen(){
   const games=[
+    {fn:'goSpotGame',   emoji:'🔍', jp:'みつけっこ',         en:'Spot the car'},
     {fn:'goDriverMode', emoji:'🎓', jp:'うんてんしゅモード', en:'Be the driver'},
     {fn:'goFreeDrive',  emoji:'🕹️', jp:'フリードライブ',     en:'Free drive'},
     {fn:'goCarWash',    emoji:'🫧', jp:'せんしゃ',           en:'Car wash'},
@@ -461,7 +489,7 @@ function driverDoneScreen(){
     <div class="scroll"><div class="done">${confettiHTML()}
       <div class="thanksstage">${state.passenger||'🧑'}</div>
       <h2 class="bigmsg">ありがとう！ じょうずだね！<span class="en">Great driving!</span></h2>
-      <div class="coinline">${COIN} コイン ゲット！ <b>+${state.driveReward||20}</b></div>
+      <div class="coinline">${COIN} コイン ゲット！ <b>+${state.driveReward||CONFIG.gameCoins}</b></div>
       <div class="gobar" style="width:100%;max-width:340px"><button class="gobtn" onclick="goDriverMode()">つぎの おきゃくさん ↺ <span class="en">Next passenger</span></button></div>
       <div class="menurow" style="width:100%;max-width:340px"><button class="menubtn" onclick="goGames()"><span class="mpi">🎮</span><b>ミニゲーム</b><span>Games</span></button><button class="menubtn" onclick="goTop()"><span class="mpi">🏠</span><b>トップ</b><span>Home</span></button></div>
     </div></div></div>`;
@@ -471,7 +499,7 @@ function driverDoneScreen(){
 function freeDriveScreen(){
   return `<div class="screen"><div class="topbar green"><button class="backbtn" onclick="goGames()">◀ やめる</button><p class="hello">🕹️ フリードライブ</p><h1 class="title">コインを あつめよう！<span class="en">Drag to steer</span></h1></div>
     <div class="scroll"><div class="fdhud"><span>${COIN} <b id="fdscore">0</b></span><span>⏱️ <b id="fdtime">20</b></span></div>
-    <div class="fdstage" id="fdstage"><div class="fdlane"></div><div class="fdcar" id="fdcar">${carSVG(favoriteCar()?favoriteCar().id:'taxi')}</div></div>
+    <div class="fdstage" id="fdstage"><div class="fdlane"></div><div class="fdcar top" id="fdcar"><svg viewBox="-17 -29 34 58" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g transform="rotate(-90)">${topCarInner(favoriteCar()?favoriteCar().id:'taxi')}</g></svg></div></div>
     <p class="maphint">くるまを うごかして コインを とってね！ / drag the car left & right</p></div></div>`;
 }
 
@@ -482,6 +510,24 @@ function carWashScreen(){
     <div class="scroll"><div class="washstage" id="washstage"><div class="washcar">${carSVG(favoriteCar()?favoriteCar().id:'taxi')}</div>${spots.join('')}
       <div class="washdone" id="washdone">✨ ピカピカ！ ✨</div></div>
     <p class="maphint">よごれを こすって おとしてね！ / rub the dirt away</p></div></div>`;
+}
+
+/* ---- SPOT THE CAR / みつけっこ — names are spoken, never shown on the cars ---- */
+function spotGameScreen(){
+  const g=state.spot||{}, target=CARS.find(c=>c.id===g.answer)||CARS[0];
+  const cars=(g.choices||[]).map((id,i)=>`<button class="spotcar" onclick="spotPick(${i})" aria-label="くるま ${i+1}">${carSVG(id)}</button>`).join('');
+  return `<div class="screen"><div class="topbar green"><button class="backbtn" onclick="goGames()">◀ やめる</button><p class="hello">🔍 みつけっこ · ${g.round||1}/5</p><h1 class="title">${target.jp} は どれ？<span class="en">Which one is the ${target.en}?</span></h1></div>
+    <div class="scroll"><div class="spotgrid n${(g.choices||[]).length}">${cars}</div>
+    <button class="spotsay" onclick="spotSay()">🔊 もういちど きく <span class="en">Hear it again</span></button>
+    <p class="maphint" id="spotmsg">タップしてね！ ゆっくりで いいよ</p></div></div>`;
+}
+
+/* ---- GROWN-UPS GATE (in front of settings) ---- */
+function gateScreen(){
+  return `<div class="screen"><div class="topbar blue"><button class="backbtn" onclick="goTop()">◀ トップ Top</button><p class="hello">せってい / Settings</p><h1 class="title">おうちの ひと むけ<span class="en">For grown-ups</span></h1></div>
+    <div class="scroll"><div class="gate"><div class="gateicon">🔒</div>
+      <p>おとなの ひとは ボタンを <b>3びょう</b> おしつづけてね<small>Press and hold for 3 seconds</small></p>
+      <button class="holdbtn" id="holdbtn"><span class="holdfill" id="holdfill"></span><b>ながおし / hold</b></button></div></div></div>`;
 }
 
 /* ---- COLOR GAME (tap the right colour) ---- */

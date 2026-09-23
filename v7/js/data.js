@@ -9,6 +9,9 @@ const CONFIG = {
   age:    4,
   rideMs: 6000,       // how long a ride lasts (ms)
   baseFare: 500,      // starting fare (yen)
+  // coins are the ONE reward a child sees (Astra review 2026-09-23): every activity pays about
+  // the same, so no single game is "the" coin farm and choosing a favourite car costs nothing
+  rideCoins: 10, gameCoins: 10,
   storeKey: 'haruTaxi.v7'  // v7 keeps its own save, separate from the original app
 };
 
@@ -20,24 +23,25 @@ const COIN = '<i class="coin" aria-hidden="true"></i>';
 function escapeHTML(s){ return String(s==null?'':s).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 
 /* Drop-off destinations.
-   pos   = pin location on the map SVG (0..360 x, 0..250 y)
+   pos   = pin location on the map SVG (0..360 x, 0..250 y). Every pin sits on a street
+           crossing of the town grid (MAP_COLS × MAP_ROWS in art.js) so routes follow real roads.
    scene = which mini-scene to draw on the riding screen (see sceneSVG in art.js) */
 const DESTS = [
-  { id:'shibuya',    jp:'しぶや',        en:'Shibuya',    emoji:'🏙️', dc:'#ffe1e1', dsh:'#f2c9d6', pos:{x:262,y:56},  scene:'city',      km:6 },
-  { id:'daikanyama', jp:'だいかんやま',   en:'Daikanyama', emoji:'🌳', dc:'#dff5df', dsh:'#c9e6cf', pos:{x:116,y:52},  scene:'forest',    km:4 },
-  { id:'komaba',     jp:'こまば',        en:'Komaba',     emoji:'🏫', dc:'#fff0d6', dsh:'#eedec0', pos:{x:56,y:104},  scene:'school',    km:3 },
-  { id:'fujisawa',   jp:'ふじさわ',      en:'Fujisawa',   emoji:'🌊', dc:'#d9eeff', dsh:'#c5def2', pos:{x:96,y:200},  scene:'sea',       km:12 },
-  { id:'kakio',      jp:'かきお',        en:'Kakio',      emoji:'🏡', dc:'#ffe6d6', dsh:'#f2d3c0', pos:{x:288,y:116}, scene:'houses',    km:8 },
-  { id:'chiba',      jp:'ちば',          en:'Chiba',      emoji:'🎡', dc:'#eee2ff', dsh:'#ddcef2', pos:{x:300,y:202}, scene:'park',      km:14 },
-  { id:'kohei',      jp:'こうへいくんち', en:"Kohei's",    emoji:'🏠', dc:'#ffeede', dsh:'#f2ddc4', pos:{x:196,y:156}, scene:'houses',    km:5 },
-  { id:'inter',      jp:'インター',      en:'Intl School', emoji:'🌍', dc:'#e2f0ff', dsh:'#cbe0f5', pos:{x:190,y:58},  scene:'school',    km:7 },
-  { id:'yochien',    jp:'こまばようちえん', en:'Kindergarten', emoji:'🧸', dc:'#fff0f6', dsh:'#f2d6e6', pos:{x:46,y:158}, scene:'kinder',  km:3 },
-  { id:'singapore',  jp:'シンガポール',  en:'Singapore',  emoji:'🦁', dc:'#e6fff6', dsh:'#c9f0e2', pos:{x:330,y:66},  scene:'singapore', km:5000 },
-  { id:'zoo',        jp:'どうぶつえん',  en:'Zoo',        emoji:'🦒', dc:'#eafbe0', dsh:'#d3f0c2', pos:{x:128,y:118}, scene:'zoo',       km:9 },
-  { id:'aquarium',   jp:'すいぞくかん',  en:'Aquarium',   emoji:'🐠', dc:'#e0f4ff', dsh:'#c2e6f7', pos:{x:210,y:110}, scene:'aquarium',  km:11 },
-  { id:'airport',    jp:'くうこう',      en:'Airport',    emoji:'✈️', dc:'#eef1f6', dsh:'#d7dde6', pos:{x:274,y:160}, scene:'airport',   km:20 },
-  { id:'grandma',    jp:'おばあちゃんち', en:"Grandma's",  emoji:'👵', dc:'#fff0e6', dsh:'#f2d9c4', pos:{x:138,y:168}, scene:'houses',    km:16 },
-  { id:'space',      jp:'うちゅうステーション', en:'Space Stn', emoji:'🛰️', dc:'#ece2ff', dsh:'#d6c8f2', pos:{x:44,y:54}, scene:'space',   km:99999 },
+  { id:'shibuya',    jp:'しぶや',        en:'Shibuya',    emoji:'🏙️', dc:'#ffe1e1', dsh:'#f2c9d6', pos:{x:256,y:56},  scene:'city',      km:6 },
+  { id:'daikanyama', jp:'だいかんやま',   en:'Daikanyama', emoji:'🌳', dc:'#dff5df', dsh:'#c9e6cf', pos:{x:112,y:56},  scene:'forest',    km:4 },
+  { id:'komaba',     jp:'こまば',        en:'Komaba',     emoji:'🏫', dc:'#fff0d6', dsh:'#eedec0', pos:{x:40,y:114},  scene:'school',    km:3 },
+  { id:'fujisawa',   jp:'ふじさわ',      en:'Fujisawa',   emoji:'🌊', dc:'#d9eeff', dsh:'#c5def2', pos:{x:256,y:172}, scene:'sea',       km:12 },
+  { id:'kakio',      jp:'かきお',        en:'Kakio',      emoji:'🏡', dc:'#ffe6d6', dsh:'#f2d3c0', pos:{x:256,y:114}, scene:'houses',    km:8 },
+  { id:'chiba',      jp:'ちば',          en:'Chiba',      emoji:'🎡', dc:'#eee2ff', dsh:'#ddcef2', pos:{x:328,y:172}, scene:'park',      km:14 },
+  { id:'kohei',      jp:'こうへいくんち', en:"Kohei's",    emoji:'🏠', dc:'#ffeede', dsh:'#f2ddc4', pos:{x:184,y:172}, scene:'houses',    km:5 },
+  { id:'inter',      jp:'インター',      en:'Intl School', emoji:'🌍', dc:'#e2f0ff', dsh:'#cbe0f5', pos:{x:184,y:56},  scene:'school',    km:7 },
+  { id:'yochien',    jp:'こまばようちえん', en:'Kindergarten', emoji:'🧸', dc:'#fff0f6', dsh:'#f2d6e6', pos:{x:40,y:172}, scene:'kinder',  km:3 },
+  { id:'singapore',  jp:'シンガポール',  en:'Singapore',  emoji:'🦁', dc:'#e6fff6', dsh:'#c9f0e2', pos:{x:328,y:56},  scene:'singapore', km:5000 },
+  { id:'zoo',        jp:'どうぶつえん',  en:'Zoo',        emoji:'🦒', dc:'#eafbe0', dsh:'#d3f0c2', pos:{x:112,y:114}, scene:'zoo',       km:9 },
+  { id:'aquarium',   jp:'すいぞくかん',  en:'Aquarium',   emoji:'🐠', dc:'#e0f4ff', dsh:'#c2e6f7', pos:{x:184,y:114}, scene:'aquarium',  km:11 },
+  { id:'airport',    jp:'くうこう',      en:'Airport',    emoji:'✈️', dc:'#eef1f6', dsh:'#d7dde6', pos:{x:328,y:114}, scene:'airport',   km:20 },
+  { id:'grandma',    jp:'おばあちゃんち', en:"Grandma's",  emoji:'👵', dc:'#fff0e6', dsh:'#f2d9c4', pos:{x:112,y:172}, scene:'houses',    km:16 },
+  { id:'space',      jp:'うちゅうステーション', en:'Space Stn', emoji:'🛰️', dc:'#ece2ff', dsh:'#d6c8f2', pos:{x:40,y:56}, scene:'space',   km:99999 },
 ];
 const PINCOLOR = { shibuya:'#ff4b3e', daikanyama:'#4fc06a', komaba:'#ffab2e', fujisawa:'#3d8bff', kakio:'#ff7a45', chiba:'#9b6bff', kohei:'#ff8a3d', inter:'#2f9bff', yochien:'#ff5fa2', singapore:'#12b886', zoo:'#6fb536', aquarium:'#2aa6d8', airport:'#7a8aa0', grandma:'#ff9a6b', space:'#8b6bff' };
 
@@ -51,15 +55,15 @@ const CARS = [
   { id:'ferrari',   jp:'フェラーリ',       en:'Ferrari',     art:{kind:'ferrari', body:'#ff2a1a', emblem:'#ffd400'},   mult:2.6, wait:6, tier:'スーパーカー' },
   { id:'porsche',   jp:'ポルシェ',         en:'Porsche',     art:{kind:'porsche', body:'#d4d8de', emblem:'#c8102e'},   mult:2.8, wait:6, tier:'スーパーカー' },
   { id:'aston',     jp:'アストンマーティン', en:'Aston Martin', art:{kind:'sport', body:'#17604a', emblem:'#0e3d2e'}, mult:2.9, wait:7, tier:'スーパーカー' },
-  { id:'mazda',     jp:'マツダ',           en:'Mazda',       art:{kind:'sedan', body:'#d3061c', emblem:'#7a0410'},     mult:1.3, wait:5, tier:'ゆったり'  },
+  { id:'mazda',     jp:'マツダ',           en:'Mazda',       art:{kind:'mazda', body:'#c8102e'},                       mult:1.3, wait:5, tier:'ゆったり'  },
   { id:'nissan',    jp:'ニッサン GT-R',    en:'Nissan GT-R', art:{kind:'gtr', body:'#1f6fd8', emblem:'#0a3f86'},       mult:2.4, wait:5, tier:'スポーツ'  },
   { id:'benz',      jp:'ベンツ',           en:'Benz',        art:{kind:'benz'},                                        mult:2.2, wait:6, tier:'ごうか'    },
   { id:'tesla',     jp:'テスラ',           en:'Tesla',       art:{kind:'tesla'},                                       mult:2.0, wait:5, tier:'でんき'    },
   { id:'alphard',   jp:'アルファード',     en:'Alphard',     art:{kind:'alphard', body:'#26292f'},                     mult:1.8, wait:7, tier:'おおきい'  },
   { id:'challenger', jp:'ダッジチャレンジャー', en:'Dodge Challenger', art:{kind:'muscle', body:'#8b3fd6', emblem:'#efe6ff'}, mult:2.5, wait:6, tier:'マッスル'  },
   { id:'lambo',     jp:'ランボルギーニ',   en:'Lamborghini', art:{kind:'lambo', body:'#f0c800', emblem:'#1a1a1a'},     mult:3.0, wait:7, tier:'スーパーカー' },
-  { id:'volvo',     jp:'ボルボ',           en:'Volvo',       art:{kind:'sedan', body:'#2e4c6d', emblem:'#c9d4e2'},     mult:1.9, wait:6, tier:'あんぜん'  },
-  { id:'toyota',    jp:'トヨタ',           en:'Toyota',      art:{kind:'sedan', body:'#0aa5b5', emblem:'#eafcff'},     mult:1.3, wait:4, tier:'ファミリー' },
+  { id:'volvo',     jp:'ボルボ',           en:'Volvo',       art:{kind:'volvo', body:'#2e4c6d'},                       mult:1.9, wait:6, tier:'あんぜん'  },
+  { id:'toyota',    jp:'トヨタ',           en:'Toyota',      art:{kind:'toyota', body:'#0aa5b5'},                      mult:1.3, wait:4, tier:'ファミリー' },
   { id:'priusalpha', jp:'プリウスα',       en:'Prius Alpha', art:{kind:'van', body:'#8ec3a8'},                         mult:1.6, wait:5, tier:'ハイブリッド' },
   { id:'bus',       jp:'バス',             en:'Bus',         art:{kind:'bus', body:'#31a3d8'},                         mult:1.4, wait:6, tier:'みんなで'  },
   { id:'train',     jp:'でんしゃ',         en:'Train',       art:{kind:'train', body:'#3aae5a'},                       mult:1.5, wait:5, tier:'せんろ'    },
@@ -93,9 +97,9 @@ const CAR_FACTS = {
   benz:'ドイツの くるま。マークは ほしの かたち！',
   tesla:'テスラは でんきで はしるよ。ガソリンは いらないんだ',
   alphard:'アルファードは おおきくて ひろい くるま',
-  volvo:'ボルボは あんぜんで じょうぶな くるま',
-  toyota:'トヨタは にほんで いちばん ゆうめいな くるま',
-  mazda:'マツダは あかい ボディが すてき',
+  mazda:'マツダ ロードスターは やねが ない ふたりのり！',
+  volvo:'ボルボは たてながの テールランプが めじるし',
+  toyota:'トヨタの ちいさい くるま。まるい マークが まえに あるよ',
   priusalpha:'プリウスは でんきと ガソリン りょうほう つかうよ',
   taxi:'にほんの タクシー。やねに あんどんが あるよ',
   sedan:'くろい セダンの タクシー',
@@ -212,6 +216,7 @@ const PETS = [
   { id:'penguin', jp:'ペンギン',   en:'Penguin', emoji:'🐧' },
   { id:'dino',    jp:'きょうりゅう', en:'Dino',   emoji:'🦖' },
   { id:'unicorn', jp:'ユニコーン', en:'Unicorn', emoji:'🦄' },
+  { id:'hamster', jp:'ハムスター', en:'Hamster', emoji:'🐹', premium:true },
   { id:'lion',    jp:'ライオン',   en:'Lion',    emoji:'🦁', premium:true },
   { id:'tiger',   jp:'トラ',       en:'Tiger',   emoji:'🐯', premium:true },
   { id:'dragon',  jp:'ドラゴン',   en:'Dragon',  emoji:'🐉', premium:true },
@@ -232,6 +237,7 @@ const DECOR_ACCESSORIES = [
   { id:'flower',  jp:'おはな',     en:'Flower',  emoji:'🌸' },
   { id:'ribbon',  jp:'リボン',     en:'Ribbon',  emoji:'🎀' },
   { id:'sparkle', jp:'ぴかぴか',   en:'Sparkle', emoji:'✨' },
+  { id:'rocket',  jp:'ロケット',   en:'Rocket',  emoji:'🚀', premium:true },
   { id:'rainbow', jp:'にじ',       en:'Rainbow', emoji:'🌈', premium:true },
   { id:'wings',   jp:'つばさ',     en:'Wings',   emoji:'🪽', premium:true },
   { id:'fire',    jp:'ファイヤー', en:'Fire',    emoji:'🔥', premium:true },
@@ -261,17 +267,20 @@ const COMPLIMENTS = [
 ];
 
 /* ---- missions ---- */
+/* reward = COINS (the only reward currency a child sees). Listed in the order they're offered —
+   the app shows ONE current mission at a time (the first not yet done). */
 const MISSIONS = [
-  { id:'ride3',    icon:'🚕', jp:'3かい のろう',            en:'Ride 3 times',        goal:3,             reward:50,  prog:()=>PROFILE.rides },
-  { id:'places',   icon:'📍', jp:'ぜんぶの ばしょへ いこう', en:'Visit every place',  goal:DESTS.length,  reward:200, prog:()=>Object.keys(PROFILE.places).length },
-  { id:'cars5',    icon:'🚗', jp:'くるまを 5だい あつめよう', en:'Collect 5 cars',    goal:5,             reward:100, prog:()=>Object.keys(PROFILE.seenCars).length },
-  { id:'drivers5', icon:'🧑', jp:'ドライバー 5にんに あおう', en:'Meet 5 drivers',    goal:5,             reward:100, prog:()=>Object.keys(PROFILE.seenDrivers||{}).length },
-  { id:'snack',    icon:'🍪', jp:'おやつを ちゅうもんしよう', en:'Order a snack',     goal:1,             reward:30,  prog:()=>PROFILE.snacksOrdered||0 },
-  { id:'streak3',  icon:'🔥', jp:'3にち つづけて のろう',    en:'Ride 3 days in a row', goal:3,          reward:120, prog:()=>PROFILE.streak?PROFILE.streak.count:0 },
-  { id:'ride10',   icon:'🏆', jp:'10かい のろう',           en:'Ride 10 times',       goal:10,            reward:150, prog:()=>PROFILE.rides },
+  { id:'ride3',    icon:'🚕', jp:'3かい のろう',            en:'Ride 3 times',        goal:3,             reward:30,  prog:()=>PROFILE.rides },
+  { id:'snack',    icon:'🍪', jp:'おやつを ちゅうもんしよう', en:'Order a snack',     goal:1,             reward:20,  prog:()=>PROFILE.snacksOrdered||0 },
+  { id:'cars5',    icon:'🚗', jp:'くるまを 5だい あつめよう', en:'Collect 5 cars',    goal:5,             reward:50,  prog:()=>Object.keys(PROFILE.seenCars).length },
+  { id:'drivers5', icon:'🧑', jp:'ドライバー 5にんに あおう', en:'Meet 5 drivers',    goal:5,             reward:50,  prog:()=>Object.keys(PROFILE.seenDrivers||{}).length },
+  { id:'streak3',  icon:'🔥', jp:'3にち つづけて のろう',    en:'Ride 3 days in a row', goal:3,          reward:50,  prog:()=>PROFILE.streak?PROFILE.streak.count:0 },
+  { id:'ride10',   icon:'🏆', jp:'10かい のろう',           en:'Ride 10 times',       goal:10,            reward:80,  prog:()=>PROFILE.rides },
+  { id:'places',   icon:'📍', jp:'ぜんぶの ばしょへ いこう', en:'Visit every place',  goal:DESTS.length,  reward:100, prog:()=>Object.keys(PROFILE.places).length },
 ];
 function missionProgress(m){ return Math.min(m.goal, m.prog()); }
 function missionDone(m){ return m.prog() >= m.goal; }
+function currentMission(){ return MISSIONS.find(m=>!missionDone(m)) || null; }
 
 /* ---- daily streak ---- */
 function todayKey(){ const d=new Date(); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
@@ -285,10 +294,13 @@ function updateStreak(){
 function streakCount(){ const s=PROFILE.streak||{}; return (s.last===todayKey()||s.last===yesterdayKey()) ? (s.count||0) : 0; }
 
 /* ---- coin shop (spend coins earned from rides & missions) ---- */
+/* cheapest first: a first purchase is possible after 1–2 rides; the gold taxi stays the long goal */
 const SHOP = [
+  { id:'acc:rocket',   kind:'acc', ref:'rocket',   jp:'ロケット',         emoji:'🚀', cost:20  },
+  { id:'pet:hamster',  kind:'pet', ref:'hamster',  jp:'ハムスター',       emoji:'🐹', cost:30  },
+  { id:'acc:rainbow',  kind:'acc', ref:'rainbow',  jp:'にじの かざり',   emoji:'🌈', cost:80  },
   { id:'car:goldtaxi', kind:'car', ref:'goldtaxi', jp:'ゴールドタクシー', emoji:'🚕', cost:300 },
   { id:'car:uchusen',  kind:'car', ref:'uchusen',  jp:'うちゅうせん',     emoji:'🛸', cost:250 },
-  { id:'acc:rainbow',  kind:'acc', ref:'rainbow',  jp:'にじの かざり',   emoji:'🌈', cost:80  },
   { id:'acc:wings',    kind:'acc', ref:'wings',    jp:'つばさ',           emoji:'🪽', cost:120 },
   { id:'acc:fire',     kind:'acc', ref:'fire',     jp:'ファイヤー',       emoji:'🔥', cost:100 },
   { id:'pet:lion',     kind:'pet', ref:'lion',     jp:'ライオン',         emoji:'🦁', cost:90  },
@@ -372,7 +384,9 @@ const PROFILE_DEFAULT = () => ({
   seenDrivers:{}, driverCounts:{}, driverStars:{},
   decor:{ accessory:'none', stickers:[] }, world:'day', lastPet:'',
   streak:{ count:0, last:null }, missionsDone:{}, snacksOrdered:0,
-  owned:{}, music:'none', readAloud:true
+  owned:{}, music:'none', readAloud:true,
+  paint:{},          // per-car respray chosen in the showroom { carId:'#hex' }
+  showEn:true        // small English sub-labels (settings toggle)
 });
 const PROFILE = PROFILE_DEFAULT();
 /* add coins AND track lifetime total (for the coin achievement) */
@@ -381,7 +395,7 @@ function earnCoins(n){ PROFILE.coins+=n; PROFILE.coinsEver=(PROFILE.coinsEver||0
 /* ---- persistence (localStorage; silently no-ops where storage is blocked) ---- */
 const SAVE_KEYS = ['name','nameEn','age','rides','points','coins','coinsEver','drives','washes',
   'places','carCounts','seenCars','seenDrivers','driverCounts','driverStars','decor','world','lastPet',
-  'streak','missionsDone','snacksOrdered','owned','music','readAloud'];
+  'streak','missionsDone','snacksOrdered','owned','music','readAloud','paint','showEn'];
 function loadProfile(){
   try{
     const raw = localStorage.getItem(CONFIG.storeKey);
@@ -392,6 +406,7 @@ function loadProfile(){
     if(!PROFILE.decor) PROFILE.decor={ accessory:'none', stickers:[] };
     if(!PROFILE.streak) PROFILE.streak={ count:0, last:null };
     if(!PROFILE.owned) PROFILE.owned={};
+    if(!PROFILE.paint) PROFILE.paint={};
   }catch(e){ /* storage unavailable — run in-memory only */ }
 }
 function saveProfile(){
@@ -401,6 +416,24 @@ function saveProfile(){
   }catch(e){ /* ignore */ }
 }
 function resetProfile(){ Object.assign(PROFILE, PROFILE_DEFAULT()); saveProfile(); }
+/* reset is undoable: the previous save is parked under <storeKey>.undo until the next reset/undo */
+const UNDO_KEY = CONFIG.storeKey + '.undo';
+function stashForUndo(){ try{ const raw=localStorage.getItem(CONFIG.storeKey); if(raw) localStorage.setItem(UNDO_KEY, raw); }catch(e){} }
+function hasUndo(){ try{ return !!localStorage.getItem(UNDO_KEY); }catch(e){ return false; } }
+function undoReset(){ try{ const raw=localStorage.getItem(UNDO_KEY); if(!raw) return false;
+  localStorage.setItem(CONFIG.storeKey, raw); localStorage.removeItem(UNDO_KEY);
+  Object.assign(PROFILE, PROFILE_DEFAULT()); loadProfile(); return true; }catch(e){ return false; } }
+
+/* respray colours offered in the showroom (emergency vehicles, trains and the spaceship keep theirs) */
+const PAINTS = [
+  { id:'red',    jp:'あか',     hex:'#e8362b' }, { id:'blue',   jp:'あお',     hex:'#2f6fd8' },
+  { id:'yellow', jp:'きいろ',   hex:'#ffcc1f' }, { id:'green',  jp:'みどり',   hex:'#34b35a' },
+  { id:'purple', jp:'むらさき', hex:'#8b3fd6' }, { id:'pink',   jp:'ピンク',   hex:'#ff7fb0' },
+  { id:'black',  jp:'くろ',     hex:'#2a2d34' }, { id:'white',  jp:'しろ',     hex:'#f2f4f7' },
+];
+const NO_PAINT_KINDS = ['police','ambulance','firetruck','train','shinkansen','spaceship','taxi','sedan-taxi','robotaxi','bus'];
+function canPaint(car){ return !!(car && car.art && NO_PAINT_KINDS.indexOf(car.art.kind)<0); }
+function paintFor(id){ return (PROFILE.paint && PROFILE.paint[id]) || null; }
 
 /* Driver ranks by number of rides (used on MyPage) */
 function levelFor(rides){

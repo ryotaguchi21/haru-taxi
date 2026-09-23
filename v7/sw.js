@@ -4,7 +4,7 @@
    v6 (/haru-taxi/) and v7 (/haru-taxi/v7/) share one origin, so they share Cache Storage:
    only ever touch caches that start with PREFIX, never the other app's. */
 const PREFIX = 'haru-taxi-v7-';
-const CACHE = PREFIX + 'v2';
+const CACHE = PREFIX + 'v3';
 const ASSETS = [
   './', './index.html',
   './css/styles.css',

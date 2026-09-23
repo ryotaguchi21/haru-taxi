@@ -6,9 +6,10 @@
 const RIDE_MS = CONFIG.rideMs;
 const state = { screen:'top', dest:null, car:null, driver:null, pet:'', friend:'none', fare:CONFIG.baseFare, pay:null,
                 points:0, order:{}, paidTotal:0, justUnlocked:false, rating:5, compliments:[], newMissions:[],
-                mode:'rider', passenger:'', requests:[], driveReward:0, colorGame:null };
-let ride=null, navTimer=null, etaTimer=null, gameTimer=null, cdTimer=null;
-function clearRide(){ if(ride){ clearInterval(ride); ride=null; } }
+                mode:'rider', passenger:'', requests:[], driveReward:0, colorGame:null,
+                coinsEarned:0, newCard:false, spot:null, showRear:false };
+let ride=null, navTimer=null, etaTimer=null, gameTimer=null, cdTimer=null, rideCtl=null;
+function clearRide(){ if(ride){ clearInterval(ride); ride=null; } if(rideCtl){ rideCtl.dead=true; clearTimeout(rideCtl.boardT); rideCtl=null; } }
 function clearNav(){ if(navTimer){ clearTimeout(navTimer); navTimer=null; } }
 function clearEta(){ if(etaTimer){ clearInterval(etaTimer); etaTimer=null; } }
 function clearGame(){ if(gameTimer){ clearInterval(gameTimer); gameTimer=null; } if(cdTimer){ clearInterval(cdTimer); cdTimer=null; } }
@@ -24,8 +25,11 @@ const SCREENS = {
   mypage:myPageScreen, garage:garageScreen, driverdex:driverDexScreen, decorate:decorateScreen,
   missions:missionsScreen, shop:shopScreen, achievements:achievementsScreen, settings:settingsScreen,
   games:gamesScreen, drivermode:driverModeScreen, driverdone:driverDoneScreen,
-  freedrive:freeDriveScreen, carwash:carWashScreen, colorgame:colorGameScreen, showroom:showroomScreen
+  freedrive:freeDriveScreen, carwash:carWashScreen, colorgame:colorGameScreen, showroom:showroomScreen,
+  spotgame:spotGameScreen, gate:gateScreen
 };
+/* English sub-labels on/off (settings) — one body class hides every .en */
+function applyLang(){ try{ document.body.classList.toggle('noen', PROFILE.showEn===false); }catch(e){} }
 
 /* pick a real Japanese voice when one exists (iOS otherwise reads JP text in English) */
 let jaVoice=null;
@@ -57,7 +61,9 @@ function render(){
   const sc=v.querySelector('.scroll'); if(sc) sc.scrollTop = keep?savedTop:0;
   // a new screen always starts at the top (belt-and-braces for any page-level scroll)
   if(changed){ try{ window.scrollTo(0,0); }catch(e){} }
-  if(state.screen==='cars')      setTimeout(initSlider,60);
+  applyLang();
+  if(state.screen==='cars'){     setTimeout(initSlider,60); if(changed && state.car) setTimeout(scrollToChosen,30); }
+  if(state.screen==='gate')      setTimeout(initHold,40);
   if(state.screen==='searching'){ sfx.go(); navTimer=setTimeout(goFound,2300); }
   if(state.screen==='found'){ setTimeout(()=>{ sfx.points(); const dv=state.driver||{}; speak('こんにちは！'+(dv.jp||'')+'です'); },140); }
   if(state.screen==='coming')     setTimeout(startComingEta,90);
@@ -68,55 +74,138 @@ function render(){
   if(state.screen==='carwash')    setTimeout(initCarWash,80);
 }
 
-/* meter + progress + live-map navigation + ticking ETA while riding */
+/* ============================================================
+   The ride, as ONE state machine that drives everything at once
+   (Astra review U04/V01/V02/V05 + the 呼ぶ→乗る→走る→着く→降りる sequence):
+     board  – car parked, door open, Haru (or the passenger) walks in, door shuts
+     drive  – cruise, then brake over the last 20% (the car visibly slows)
+     arrive – map car, big car, wheels, road, scenery all stop TOGETHER; the passenger
+              steps out and waves; the button becomes 「ついた！ おりる」
+     loop   – 「もっと ドライブ」: one more lap around the block, then arrive again
+   「すぐ とうちゃく」 fast-forwards the current leg but still ends in a proper stop.
+   Everything is recomputed from the clock, so rAF (smooth) and the 250 ms interval
+   (keeps going in a hidden tab) can both call tick() safely.
+   ============================================================ */
+const BOARD_MS=1500, FF_MS=1400, MORE_FARE=300;
 function startRide(){
-  // the meter now ends exactly on the fare the car picker promised (estFare), and the
-  // emergency vehicles marked むりょう really are free
+  // the meter ends exactly on the fare the car picker promised (estFare); むりょう cars are free
   const car=CARS.find(x=>x.id===state.car)||{mult:1};
-  const free=!car.mult, base=free?0:CONFIG.baseFare, target=free?0:Math.max(base, estFare(car));
-  state.fare=base; state.arrived=false;
-  const bar=document.getElementById('progbar');
-  if(bar){ bar.style.transition='width '+RIDE_MS+'ms linear'; requestAnimationFrame(()=>{ bar.style.width='100%'; }); }
-  const m0=document.getElementById('meter'); if(m0) m0.textContent='¥'+base.toLocaleString();
-  sfx.horn();
-  // live-map references + geometry
+  const free=!car.mult, base=free?0:CONFIG.baseFare;
   const d=DESTS.find(x=>x.id===state.dest);
-  const route=document.getElementById('liveroute'), token=document.getElementById('livecar'),
-        done=document.getElementById('livedone'), etaEl=document.getElementById('etamin');
-  const totalMin=etaMinutes(d); let len=0; try{ len=route?route.getTotalLength():0; }catch(_){}
+  const driverMode=state.mode==='driver';
+  const ctl={ dead:false, phase:'board', target:free?0:Math.max(base, estFare(car)), extra:0, seg:null, boardT:null };
+  rideCtl=ctl; state.fare=base; state.arrived=false;
+  const $=id=>document.getElementById(id);
+  const stage=$('ridestage'), bar=$('progbar'), meter=$('meter'), etaEl=$('etamin'), gate=$('destgate'),
+        walker=$('walker'), route=$('liveroute'), token=$('livecar'), done=$('livedone');
+  let len=0; try{ len=route?route.getTotalLength():0; }catch(_){}
   if(done && len){ done.style.strokeDasharray=len; done.style.strokeDashoffset=len; }
-  let facing=1;
-  function updateLive(pr){           // absolute (idempotent) — safe to call from rAF + interval
-    if(route && token && len){
-      const at=len*pr, pt=route.getPointAtLength(at), ah=route.getPointAtLength(Math.min(len, at+3));
-      if(ah.x-pt.x>0.5) facing=1; else if(ah.x-pt.x<-0.5) facing=-1;     // face left/right of travel
-      token.setAttribute('transform','translate('+pt.x.toFixed(1)+','+pt.y.toFixed(1)+') scale('+facing+',1)');
-      if(done) done.style.strokeDashoffset=(len*(1-pr)).toFixed(1);        // reveal the road behind the car
-    }
-    if(etaEl) etaEl.textContent=Math.max(0,Math.ceil(totalMin*(1-pr)));
+  if(bar) bar.style.transition='none';
+  if(meter) meter.textContent='¥'+base.toLocaleString();
+  const totalMin=etaMinutes(d);
+  let heading=-90;
+  // top-down map car: position on the path + heading from the path's tangent (turns WITH the road)
+  function place(el, L, pr){
+    if(!el||!token||!L) return;
+    const at=L*pr, pt=el.getPointAtLength(at);
+    const a=el.getPointAtLength(Math.max(0,at-2)), b=el.getPointAtLength(Math.min(L,at+2));
+    if(Math.hypot(b.x-a.x,b.y-a.y)>0.5) heading=Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI;
+    token.setAttribute('transform','translate('+pt.x.toFixed(1)+','+pt.y.toFixed(1)+') rotate('+heading.toFixed(1)+')');
   }
-  const t0=performance.now();
-  // interval drives the meter AND the map (keeps advancing even if the tab is backgrounded)
-  ride=setInterval(()=>{
-    const el=Math.min(1,(performance.now()-t0)/RIDE_MS);
-    state.fare=Math.round((base+(target-base)*el)/10)*10;          // climbs in ¥10 steps like a real meter
-    const m=document.getElementById('meter'); if(m) m.textContent='¥'+state.fare.toLocaleString();
-    updateLive(el);
-    if(performance.now()-t0>=RIDE_MS){
-      clearInterval(ride); ride=null; updateLive(1); sfx.ding();
-      state.fare=target; state.arrived=true;
-      if(m) m.textContent='¥'+target.toLocaleString();
-      const b=document.getElementById('arrbadge'); if(b) b.classList.add('show');
-      const ob=document.getElementById('offbtn'); if(ob){ ob.disabled=false; ob.classList.add('pulse'); }
-    }
-  },250);
-  // rAF makes the car glide smoothly while the tab is visible
-  (function frame(){
-    if(state.screen!=='riding') return;
-    const pr=Math.min(1,(performance.now()-t0)/RIDE_MS); updateLive(pr);
-    if(pr<1) requestAnimationFrame(frame);
-  })();
+  function show(pr){
+    const looping=ctl.phase==='loop';
+    if(looping) place(ctl.loopEl, ctl.loopLen, pr);
+    else { place(route,len,pr); if(done&&len) done.style.strokeDashoffset=(len*(1-pr)).toFixed(1); }
+    const fare = looping ? ctl.target+ctl.extra*pr : base+(ctl.target-base)*pr;
+    state.fare=Math.round(fare/10)*10;                                  // climbs in ¥10 steps like a real meter
+    if(meter) meter.textContent='¥'+state.fare.toLocaleString();
+    if(etaEl) etaEl.textContent=Math.max(0,Math.ceil((looping?2:totalMin)*(1-pr)));
+    if(bar) bar.style.width=(pr*100).toFixed(1)+'%';
+    // the destination building glides in over the last stretch and is there when the car stops
+    if(gate){ const g=Math.max(0,Math.min(1,(pr-0.68)/0.32)); gate.style.transform='translateX('+((1-g)*170).toFixed(1)+'%)'; gate.style.opacity=g>0?'1':'0'; }
+  }
+  function progress(now){
+    const s=ctl.seg, t=Math.min(1,(now-s.t0)/s.dur);
+    if(s.ff) return { t, p:s.p0+(1-s.p0)*(1-(1-t)*(1-t)) };           // skip-ahead: quick, then brake
+    // steady speed for 80% of the time, then a linear brake to 0 (distance: .8/.9 + .1/.9)
+    const p = t<=0.8 ? t/0.9 : (0.8+(t-0.8)-(t-0.8)*(t-0.8)/0.4)/0.9;
+    return { t, p:Math.min(1,p) };
+  }
+  function tick(){
+    if(ctl.dead || !ctl.seg || state.arrived) return;
+    const r=progress(performance.now()); show(r.p);
+    if(stage) stage.classList.toggle('slowing', ctl.seg.ff ? r.t>0.4 : r.t>0.8);
+    if(r.t>=1) arrive();
+  }
+  function setHint(t){ const h=$('ridehint'); if(h) h.textContent=t; }
+  function setTitle(jp,en){ const h=$('ridetitle'); if(h) h.innerHTML=jp+'<span class="en">'+en+'</span>'; }
+  function drive(){
+    if(ctl.dead) return;
+    clearTimeout(ctl.boardT); ctl.boardT=null;
+    if(ctl.phase==='board') ctl.phase='drive';
+    if(stage){ stage.classList.remove('parked','arrived','slowing'); }
+    if(walker) walker.className='walker';
+    ctl.seg={ t0:performance.now(), dur:RIDE_MS, p0:0, ff:false };
+    sfx.horn();
+    setHint(ctl.phase==='loop' ? '🔁 ぐるっと ひとまわり！ / one more lap'
+                               : `${d.emoji} ${d.jp} へ むかって いるよ / heading to ${d.en}`);
+    if(!driverMode && ctl.phase==='drive') setTitle('ドライブ ちゅう！', 'Riding to '+d.en);
+    if(ride) clearInterval(ride);
+    ride=setInterval(tick,250);
+    (function frame(){ if(ctl.dead||state.arrived||!ctl.seg||state.screen!=='riding') return; tick(); requestAnimationFrame(frame); })();
+  }
+  function arrive(){
+    if(state.arrived || ctl.dead) return;
+    state.arrived=true;
+    if(ride){ clearInterval(ride); ride=null; }
+    show(1);
+    if(ctl.phase==='loop'){ ctl.target+=ctl.extra; ctl.extra=0; }
+    state.fare=Math.round(ctl.target/10)*10; if(meter) meter.textContent='¥'+state.fare.toLocaleString();
+    sfx.ding();
+    if(stage){ stage.classList.remove('slowing'); stage.classList.add('arrived'); }
+    if(walker){ walker.className='walker'; void walker.offsetWidth; walker.className='walker alighting'; }
+    const b=$('arrbadge'); if(b) b.classList.add('show');
+    const chip=etaEl&&etaEl.closest('.etapill'); if(chip) chip.classList.add('arrived');
+    const ob=$('offbtn'); if(ob){ ob.className='gobtn yellow pulse';
+      ob.innerHTML = driverMode ? 'とうちゃく！ おろす <span class="en">Drop off →</span>' : 'ついた！ おりる <span class="en">Get off →</span>'; }
+    const mb=$('morebtn'); if(mb) mb.hidden=false;
+    setTitle('ついた！', 'Arrived at '+d.en);
+    setHint(`${d.emoji} ${d.jp} に ついた！ / we're here`);
+    speak(d.jp+' に ついたよ！');
+  }
+  ctl.fastForward=function(){
+    if(ctl.dead || state.arrived) return;
+    if(ctl.phase==='board') drive();
+    const r=progress(performance.now());
+    ctl.seg={ t0:performance.now(), dur:FF_MS, p0:r.p, ff:true }; sfx.go();
+  };
+  ctl.more=function(){
+    if(ctl.dead || !state.arrived) return;
+    const le=$('liveloop'); let L=0; try{ L=le?le.getTotalLength():0; }catch(_){}
+    if(!le||!L) return;
+    ctl.loopEl=le; ctl.loopLen=L; le.setAttribute('opacity','1');
+    ctl.phase='loop'; ctl.extra=MORE_FARE; state.arrived=false;
+    const b=$('arrbadge'); if(b) b.classList.remove('show');
+    const chip=etaEl&&etaEl.closest('.etapill'); if(chip) chip.classList.remove('arrived');
+    const ob=$('offbtn'); if(ob){ ob.className='gobtn skip'; ob.innerHTML='⏩ すぐ とうちゃく <span class="en">Skip ahead</span>'; }
+    const mb=$('morebtn'); if(mb) mb.hidden=true;
+    setTitle('もっと ドライブ！', 'Keep driving');
+    drive();
+  };
+  // ---- board: door open, passenger walks in, door shuts, then go ----
+  setHint(driverMode ? '🚪 おきゃくさんが のるよ…' : '🚪 のるよ… シートベルト カチッ！');
+  if(!driverMode) setTitle('のるよ！', 'Getting in…');
+  setTimeout(()=>{ if(!ctl.dead && ctl.phase==='board') sfx.tap(); }, 250);   // door opens
+  setTimeout(()=>{ if(!ctl.dead && ctl.phase==='board') sfx.tap(); }, 1150);  // …and shuts
+  ctl.boardT=setTimeout(drive, BOARD_MS);
+  show(0);
 }
+/* the one sticky button: fast-forward while driving, get off once stopped */
+function rideButton(){
+  if(!state.arrived){ if(rideCtl && rideCtl.fastForward) rideCtl.fastForward(); return; }
+  if(state.mode==='driver') goDriverDrop(); else goPay();
+}
+function moreDrive(){ if(rideCtl && rideCtl.more){ sfx.tap(); rideCtl.more(); } }
 
 /* pickup screen: tick the ETA minutes down while the car drives in */
 function startComingEta(){
@@ -134,7 +223,7 @@ function initSlider(){
   if(!wrap||!knob) return;
   // scale = on-screen px per layout px (≠1 when the tablet layout zooms the app) — pointer
   // positions are divided by it so the knob tracks the finger exactly
-  const pad=5; let x=0, max=0, dragging=false, startX=0, scale=1, fired=false;
+  const pad=5; let x=0, max=0, dragging=false, startX=0, scale=1, fired=false, downX=0;
   function layout(){ max=Math.max(0, wrap.clientWidth - knob.offsetWidth - pad*2);
     const r=wrap.getBoundingClientRect(); scale=(wrap.offsetWidth && r.width) ? r.width/wrap.offsetWidth : 1; }
   function px(e){ return (e.clientX!=null?e.clientX:0)/scale; }
@@ -144,17 +233,42 @@ function initSlider(){
     knob.style.transition=''; if(fill) fill.style.transition='';
     const cur=(knob.getBoundingClientRect().left - wrap.getBoundingClientRect().left)/scale - pad;
     setX(cur);
-    startX=px(e)-x; try{ knob.setPointerCapture(e.pointerId); }catch(_){} e.preventDefault(); }
+    downX=px(e); startX=downX-x; try{ knob.setPointerCapture(e.pointerId); }catch(_){} e.preventDefault(); }
   function move(e){ if(!dragging) return; setX(px(e)-startX); }
-  function up(){ if(!dragging) return; dragging=false;
+  function up(e){ if(!dragging) return; dragging=false;
     if(x>=max-6){ fired=true; setX(max); if(fill) fill.style.width='100%'; wrap.classList.add('slidedone'); knob.textContent='✅'; goSearching(); }
+    else if(e && e.type==='pointerup' && Math.abs(px(e)-downX)<10) autoSlide();   // a plain TAP calls the car too
     else { knob.style.transition='transform .2s'; if(fill) fill.style.transition='width .2s'; setX(0); if(fill) fill.style.width='0';
       setTimeout(()=>{ knob.style.transition=''; if(fill) fill.style.transition=''; },220); }
   }
+  // Astra U02: a tap anywhere on the bar glides the taxi across by itself, then calls it
+  function autoSlide(){ if(fired) return; fired=true; layout(); sfx.go();
+    knob.style.transition='transform .45s cubic-bezier(.4,0,.2,1)'; if(fill) fill.style.transition='width .45s cubic-bezier(.4,0,.2,1)';
+    setX(max); if(fill) fill.style.width='100%';
+    later(480, ()=>{ wrap.classList.add('slidedone'); knob.textContent='✅'; goSearching(); }); }
   knob.addEventListener('pointerdown',down);
   knob.addEventListener('pointermove',move);
   knob.addEventListener('pointerup',up);
   knob.addEventListener('pointercancel',up);
+  wrap.addEventListener('click',e=>{ if(e.target!==knob && !dragging) autoSlide(); });
+}
+/* entering the car picker with a car already chosen (showroom 「この くるまに のる」): bring it into view */
+function scrollToChosen(){
+  const sc=document.querySelector('.carsscroll'), card=document.querySelector('.carcard.selected'); if(!sc||!card) return;
+  const shelf=card.parentElement;
+  shelf.scrollLeft=Math.max(0, card.offsetLeft-(shelf.clientWidth-card.offsetWidth)/2);
+  const top=shelf.offsetTop-44; if(top>sc.clientHeight*0.35) sc.scrollTop=top;
+}
+/* grown-ups gate in front of settings: hold for 3 s (a tap does nothing) — Astra Q5 */
+function initHold(){
+  const b=document.getElementById('holdbtn'), f=document.getElementById('holdfill'); if(!b||!f) return;
+  let t=null; const HOLD=3000;
+  function down(e){ e.preventDefault(); f.style.transition='width '+HOLD+'ms linear'; f.style.width='100%';
+    clearTimeout(t); t=later(HOLD, ()=>{ sfx.ding(); state.screen='settings'; render(); }); }
+  function up(){ clearTimeout(t); t=null; f.style.transition='width .2s'; f.style.width='0'; }
+  b.addEventListener('pointerdown',down);
+  ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,up));
+  b.addEventListener('contextmenu',e=>e.preventDefault());
 }
 
 /* ---- food & drink order (overlay so the ride meter keeps running) ---- */
@@ -212,7 +326,7 @@ function finishRate(){ sfx.points();
 function checkMissions(){
   const newly=[];
   MISSIONS.forEach(m=>{ if(missionDone(m) && !PROFILE.missionsDone[m.id]){
-    PROFILE.missionsDone[m.id]=true; PROFILE.points+=m.reward; earnCoins(Math.round(m.reward/10)); newly.push(m);
+    PROFILE.missionsDone[m.id]=true; PROFILE.points+=m.reward*10; earnCoins(m.reward); newly.push(m);   // reward is in coins
   }});
   return newly;
 }
@@ -222,7 +336,8 @@ function goTop(){ clearRide(); sfx.tap(); state.preferCar=null; state.returnTo=n
 function goPlaces(){ clearRide(); sfx.tap();
   state.screen='home'; state.dest=null; state.car=null; state.driver=null; state.pet=''; state.friend='none'; state.pay=null;
   state.mode='rider'; state.passenger='';
-  state.order={}; state.paidTotal=0; state.justUnlocked=false; state.rating=5; state.compliments=[]; state.newMissions=[]; render();
+  state.order={}; state.paidTotal=0; state.justUnlocked=false; state.rating=5; state.compliments=[]; state.newMissions=[];
+  state.coinsEarned=0; state.newCard=false; render();
 }
 function goMyPage(){ sfx.tap(); state.screen='mypage'; render(); }
 function goGarage(){ sfx.tap(); state.screen='garage'; render(); }
@@ -258,13 +373,17 @@ function pickPay(id){
   const snacks=orderTotal(state.order), total=state.fare+snacks;
   state.paidTotal=total; state.points=Math.max(20,Math.round(total/10));
   const before = CARS.filter(carUnlocked).length;
-  PROFILE.rides++; PROFILE.points+=state.points; earnCoins(Math.round(state.points/10));
+  // every ride pays the same coins whatever the car costs (Astra: don't punish picking a favourite);
+  // points are still tallied for the rank but no longer shown to the child
+  PROFILE.rides++; PROFILE.points+=state.points; earnCoins(CONFIG.rideCoins);
   PROFILE.places[state.dest]=true;
+  state.newCard = !(PROFILE.carCounts[state.car]>0);           // first ride in this car → its card
   PROFILE.carCounts[state.car]=(PROFILE.carCounts[state.car]||0)+1;
   if(state.driver && state.driver.id){ PROFILE.driverCounts[state.driver.id]=(PROFILE.driverCounts[state.driver.id]||0)+1; PROFILE.seenDrivers[state.driver.id]=true; }
   if(orderList(state.order).length) PROFILE.snacksOrdered=(PROFILE.snacksOrdered||0)+1;
   updateStreak();
   state.newMissions=checkMissions();
+  state.coinsEarned = CONFIG.rideCoins + state.newMissions.reduce((t,m)=>t+m.reward,0);
   const after = CARS.filter(carUnlocked).length;
   state.justUnlocked = after>before;
   if(state.justUnlocked) setTimeout(()=>sfx.warp(),700);
@@ -285,13 +404,19 @@ function goBack(){ sfx.tap(); let t=state.returnTo||'top'; state.returnTo=null;
   if(!SCREENS[t]) t='top';
   state.screen=t; render(); }
 function goAchievements(){ sfx.tap(); state.screen='achievements'; render(); }
-function goSettings(){ sfx.tap(); state.screen='settings'; render(); }
+function goSettings(){ sfx.tap(); state.screen='gate'; render(); }     // grown-ups gate first
 function goGames(){ sfx.tap(); state.screen='games'; render(); }
 
 /* ---- showroom (モーターショー) ---- */
 function goShowroom(){ sfx.tap(); state.showroomIdx=0; state.screen='showroom'; render(); setTimeout(()=>speak(CARS[showroomIndex()].jp),300); }
-function showroomNext(){ state.showroomIdx=(state.showroomIdx||0)+1; sfx.select(); render(); speak(CARS[showroomIndex()].jp); }
-function showroomPrev(){ state.showroomIdx=(state.showroomIdx||0)-1; sfx.select(); render(); speak(CARS[showroomIndex()].jp); }
+function showroomNext(){ state.showroomIdx=(state.showroomIdx||0)+1; state.showRear=false; sfx.select(); render(); speak(CARS[showroomIndex()].jp); }
+function showroomPrev(){ state.showroomIdx=(state.showroomIdx||0)-1; state.showRear=false; sfx.select(); render(); speak(CARS[showroomIndex()].jp); }
+function showroomFlip(){ state.showRear=!state.showRear; sfx.select(); render(); speak(state.showRear?'うしろ':'まえ'); }
+/* respray: stored per car, shown everywhere that car is drawn (ride, wash, garage…) */
+function paintCar(id, hex){ const c=CARS.find(x=>x.id===id); if(!canPaint(c)) return;
+  PROFILE.paint=PROFILE.paint||{}; if(hex) PROFILE.paint[id]=hex; else delete PROFILE.paint[id];
+  saveProfile(); sfx.select(); render();
+  const p=PAINTS.find(x=>x.hex===hex); speak(p ? p.jp+' に ぬったよ' : 'もとの いろ'); }
 function showroomSpeak(){ const c=CARS[showroomIndex()]; sfx.tap(); speak(c.jp+'。'+carFact(c.id)); }
 function showroomEngine(){ const c=CARS[showroomIndex()]; sfx.play(engineSound(c)); }
 function rideThisCar(id){ const keep=id; goPlaces(); state.preferCar=keep; }
@@ -311,8 +436,11 @@ function setAge(v){ const n=parseInt(v,10); if(n>=1&&n<=12){ PROFILE.age=n; save
 function toggleReadAloud(btn){ PROFILE.readAloud=!PROFILE.readAloud; saveProfile();
   if(btn){ btn.textContent=PROFILE.readAloud?'ON':'OFF'; btn.classList.toggle('on',PROFILE.readAloud); }
   if(PROFILE.readAloud) speak('こんにちは'); }
-function doReset(){ try{ if(window.confirm && !window.confirm('データを けしても いい？ / Reset all progress?')) return; }catch(e){}
-  resetProfile(); sfx.tap(); goTop(); }
+function doReset(){ try{ if(window.confirm && !window.confirm('データを けしても いい？ / Reset all progress?\n(あとで「もとに もどす」で とりけせます / can be undone)')) return; }catch(e){}
+  stashForUndo(); resetProfile(); sfx.tap(); goTop(); }
+function doUndoReset(){ if(undoReset()){ sfx.points(); toast('↩️ もとに もどしたよ'); } render(); }
+function toggleEnglish(btn){ PROFILE.showEn = (PROFILE.showEn===false); saveProfile(); applyLang();
+  if(btn){ btn.textContent=PROFILE.showEn?'ON':'OFF'; btn.classList.toggle('on',PROFILE.showEn); } }
 
 /* ---- driver mode (Haru is the driver) ---- */
 function goDriverMode(){ sfx.tap(); state.mode='rider';
@@ -329,7 +457,7 @@ function acceptRide(i){ const r=state.requests&&state.requests[i]; if(!r) return
 function goDriverDrop(){ if(!state.arrived) return;      // only after the trip actually finishes
   clearRide(); sfx.points();
   // ~ the same as a normal ride pays, so driver mode isn't a two-tap coin farm
-  PROFILE.drives=(PROFILE.drives||0)+1; const reward=15+Math.round(Math.random()*10); state.driveReward=reward; earnCoins(reward);
+  PROFILE.drives=(PROFILE.drives||0)+1; const reward=CONFIG.gameCoins; state.driveReward=reward; earnCoins(reward);
   PROFILE.places[state.dest]=true; saveProfile(); state.mode='rider'; state.screen='driverdone'; render();
 }
 
@@ -379,7 +507,7 @@ function initCarWash(){
   function remove(d){ if(finished || d.classList.contains('gone')) return;
     d.classList.add('gone'); sfx.tap(); remaining--;
     if(remaining<=0){ finished=true; const done=document.getElementById('washdone'); if(done) done.classList.add('show'); sfx.points();
-      PROFILE.washes=(PROFILE.washes||0)+1; earnCoins(40); saveProfile(); toast(COIN+' +40 ピカピカ！');
+      PROFILE.washes=(PROFILE.washes||0)+1; earnCoins(CONFIG.gameCoins); saveProfile(); toast(COIN+' +'+CONFIG.gameCoins+' ピカピカ！');
       later(1600, goGames); }
   }
   dirts.forEach(d=>{
@@ -416,10 +544,33 @@ function goColorGame(){ sfx.tap(); state.colorGame={round:1,score:0}; newColorRo
 function colorPick(i){ const g=state.colorGame; if(!g || g.locked) return;
   if(i===g.answer){ g.locked=true; sfx.points(); if(!g.missed) g.score++;
     const msg=document.getElementById('colormsg'); if(msg) msg.textContent='せいかい！ 🎉 correct!';
-    if(g.round>=5){ const coins=Math.max(10,g.score*10); earnCoins(coins); saveProfile(); toast(COIN+' +'+coins+'！');
+    if(g.round>=5){ const coins=CONFIG.gameCoins; earnCoins(coins); saveProfile(); toast(COIN+' +'+coins+'！');
       later(1400, goGames); return; }
     g.round++; later(900, ()=>{ newColorRound(); render(); speak(state.colorGame.jp+'の くるまは どれ？'); });
   } else { g.missed=true; sfx.horn(); const msg=document.getElementById('colormsg'); if(msg) msg.textContent='ちがうよ！ もういちど / try again'; }
+}
+
+/* ---- みつけっこ / spot the car (Astra Q1): the name is SPOKEN, the cars are shown without
+   names. Starts with 2 parked cars, later 3; no timer; 🔊 replays the question; a wrong tap
+   says which car that was (still learning). Pays the same 10 coins as every other game. ---- */
+const SPOT_POOL=['benz','tesla','ferrari','lambo','porsche','nissan','alphard','shinkansen','taxi','police',
+  'bus','mazda','volvo','toyota','firetruck','challenger','train','ambulance','dump','priusalpha'];
+function shuffled(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+function newSpotRound(){ const g=state.spot;
+  const ans=shuffled(SPOT_POOL.filter(id=>id!==g.last))[0];
+  const n = g.round<=2 ? 2 : 3;
+  g.answer=ans; g.last=ans; g.choices=shuffled([ans].concat(shuffled(SPOT_POOL.filter(id=>id!==ans)).slice(0,n-1)));
+  g.locked=false; g.missed=false; }
+function goSpotGame(){ sfx.tap(); state.spot={round:1,score:0}; newSpotRound(); state.screen='spotgame'; render(); later(350,spotSay); }
+function spotSay(){ const g=state.spot; const c=g&&CARS.find(x=>x.id===g.answer); if(c) speak(c.jp+' は どれ？'); }
+function spotPick(i){ const g=state.spot; if(!g||g.locked) return;
+  const id=g.choices[i], c=CARS.find(x=>x.id===id), btn=document.querySelectorAll('.spotcar')[i], msg=document.getElementById('spotmsg');
+  if(id===g.answer){ g.locked=true; sfx.points(); if(!g.missed) g.score++;
+    if(btn) btn.classList.add('right'); if(msg) msg.textContent='せいかい！ 🎉 '+c.jp; speak('せいかい！ '+c.jp+'！');
+    if(g.round>=5){ earnCoins(CONFIG.gameCoins); saveProfile(); toast(COIN+' +'+CONFIG.gameCoins+' みつけた！'); later(1700, goGames); return; }
+    g.round++; later(1400, ()=>{ newSpotRound(); render(); spotSay(); });
+  } else { g.missed=true; sfx.horn(); if(btn) btn.classList.add('wrong');
+    if(msg) msg.textContent='それは '+c.jp+' だよ！ もういちど'; speak('それは '+c.jp+' だよ'); }
 }
 
 /* expose to window for inline handlers */
@@ -429,9 +580,11 @@ Object.assign(window, { goTop, goPlaces, goMyPage, goGarage, goDriverDex, goDeco
   openOrder, closeOrder, toggleOrder, confirmOrder, honk, pullOver,
   goShop, goAchievements, goSettings, goGames, buy, setMusic, setName, setNameEn, setAge, toggleReadAloud, doReset,
   goDriverMode, acceptRide, goDriverDrop, goFreeDrive, goCarWash, goColorGame, colorPick,
-  goShowroom, showroomNext, showroomPrev, showroomSpeak, showroomEngine, rideThisCar, goBack });
+  goShowroom, showroomNext, showroomPrev, showroomSpeak, showroomEngine, rideThisCar, goBack,
+  rideButton, moreDrive, showroomFlip, paintCar, doUndoReset, toggleEnglish, goSpotGame, spotSay, spotPick });
 
 /* start: restore saved profile, reflect a remembered mute, then draw */
 loadProfile();
+applyLang();
 (function(){ const mb=document.getElementById('muteBtn'); if(mb && sfx.isMuted()) mb.textContent='🔇'; })();
 render();
